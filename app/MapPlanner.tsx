@@ -51,6 +51,11 @@ type DraftLine = Omit<LineSegment, "id">;
 
 const DEFAULT_SIZE: BoardSize = { width: 920, height: 540 };
 const MIN_SIZE: BoardSize = { width: 360, height: 320 };
+const boundaryLabel: Record<LocationType, string> = {
+  apartment: "квартиры",
+  dacha: "дачного участка",
+  yard: "двора",
+};
 
 function storageKey(locationType: LocationType) {
   return `treasure-map:layout:${locationType}:v1`;
@@ -584,7 +589,9 @@ export default function MapPlanner({
         <p className="step-number">03</p>
         <div>
           <p className="eyebrow">Маршрут</p>
-          <h2 id="map-layout-title">Расставим точки на карте</h2>
+          <h2 id="map-layout-title">
+            Расставим точки на карте и начертим границы {boundaryLabel[locationType]}
+          </h2>
         </div>
         <div className="map-status" aria-live="polite">
           <strong>{placedCount} из {totalPoints}</strong>
