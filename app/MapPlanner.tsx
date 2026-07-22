@@ -32,6 +32,7 @@ type StoredMap = {
   size: BoardSize;
   positions: Record<string, PointPosition>;
   lines: LineSegment[];
+  styled: boolean;
 };
 
 type ResizeAxis = "x" | "y" | "xy";
@@ -142,6 +143,100 @@ function snapLineEnd(
   return nearestLineEndpoint(end, lines, bounds);
 }
 
+function clusterValues(values: number[], threshold: number) {
+  const indexedValues = values
+    .map((value, index) => ({ value, index }))
+    .sort((first, second) => first.value - second.value);
+  const result = [...values];
+  let cluster: typeof indexedValues = [];
+
+  function commitCluster() {
+    if (!cluster.length) return;
+    const average = cluster.reduce((sum, item) => sum + item.value, 0) / cluster.length;
+    cluster.forEach((item) => { result[item.index] = average; });
+  }
+
+  indexedValues.forEach((item) => {
+    const average = cluster.length
+      ? cluster.reduce((sum, current) => sum + current.value, 0) / cluster.length
+      : item.value;
+
+    if (cluster.length && item.value - average > threshold) {
+      commitCluster();
+      cluster = [];
+    }
+    cluster.push(item);
+  });
+  commitCluster();
+
+  return result;
+}
+
+function beautifyLines(lines: LineSegment[], bounds: DOMRect) {
+  if (!lines.length) return lines;
+
+  const dominantLine = lines.reduce((longest, line) => {
+    const lineLength = Math.hypot(
+      ((line.x2 - line.x1) / 100) * bounds.width,
+      ((line.y2 - line.y1) / 100) * bounds.height,
+    );
+    const longestLength = Math.hypot(
+      ((longest.x2 - longest.x1) / 100) * bounds.width,
+      ((longest.y2 - longest.y1) / 100) * bounds.height,
+    );
+    return lineLength > longestLength ? line : longest;
+  });
+  const angle = lineAngle(dominantLine, bounds);
+  const cosine = Math.cos(angle);
+  const sine = Math.sin(angle);
+
+  const localLines = lines.map((line) => {
+    const toLocal = (x: number, y: number) => {
+      const pixelX = (x / 100) * bounds.width;
+      const pixelY = (y / 100) * bounds.height;
+      return {
+        u: pixelX * cosine + pixelY * sine,
+        v: -pixelX * sine + pixelY * cosine,
+      };
+    };
+    const first = toLocal(line.x1, line.y1);
+    const second = toLocal(line.x2, line.y2);
+
+    if (Math.abs(second.u - first.u) >= Math.abs(second.v - first.v)) {
+      const average = (first.v + second.v) / 2;
+      first.v = average;
+      second.v = average;
+    } else {
+      const average = (first.u + second.u) / 2;
+      first.u = average;
+      second.u = average;
+    }
+
+    return { id: line.id, first, second };
+  });
+
+  const localPoints = localLines.flatMap((line) => [line.first, line.second]);
+  const snappedU = clusterValues(localPoints.map((point) => point.u), 16);
+  const snappedV = clusterValues(localPoints.map((point) => point.v), 16);
+
+  return localLines.map((line, index) => {
+    const fromLocal = (u: number, v: number) => ({
+      x: clamp(((u * cosine - v * sine) / bounds.width) * 100, 0, 100),
+      y: clamp(((u * sine + v * cosine) / bounds.height) * 100, 0, 100),
+    });
+    const first = fromLocal(snappedU[index * 2], snappedV[index * 2]);
+    const second = fromLocal(snappedU[index * 2 + 1], snappedV[index * 2 + 1]);
+
+    return {
+      id: line.id,
+      x1: first.x,
+      y1: first.y,
+      x2: second.x,
+      y2: second.y,
+    };
+  });
+}
+
 function restoreMap(value: string | null): StoredMap | null {
   if (!value) return null;
 
@@ -197,6 +292,7 @@ function restoreMap(value: string | null): StoredMap | null {
       },
       positions,
       lines,
+      styled: stored.styled === true,
     };
   } catch {
     return null;
@@ -215,6 +311,7 @@ export default function MapPlanner({
   const [lines, setLines] = useState<LineSegment[]>([]);
   const [draftLine, setDraftLine] = useState<DraftLine | null>(null);
   const [mode, setMode] = useState<DrawingMode>("points");
+  const [styled, setStyled] = useState(false);
   const [ready, setReady] = useState(false);
   const [draggingId, setDraggingId] = useState<PointId | null>(null);
   const [resizing, setResizing] = useState(false);
@@ -254,6 +351,7 @@ export default function MapPlanner({
       setSize(stored.size);
       setPositions(stored.positions);
       setLines(stored.lines);
+      setStyled(stored.styled);
       nextLineId.current = Math.max(0, ...stored.lines.map((line) => line.id)) + 1;
     }
     setReady(true);
@@ -284,11 +382,16 @@ export default function MapPlanner({
     if (!ready) return;
 
     try {
-      window.localStorage.setItem(storageKey(locationType), JSON.stringify({ size, positions, lines }));
+      window.localStorage.setItem(storageKey(locationType), JSON.stringify({
+        size,
+        positions,
+        lines,
+        styled,
+      }));
     } catch {
       // Storage can be disabled by browser privacy settings.
     }
-  }, [lines, locationType, positions, ready, size]);
+  }, [lines, locationType, positions, ready, size, styled]);
 
   function updatePointFromPointer(event: ReactPointerEvent) {
     if (mode !== "points" || draggingId === null || !boardRef.current) return;
@@ -467,6 +570,14 @@ export default function MapPlanner({
     }));
   }
 
+  function beautifyMap() {
+    if (!boardRef.current || !lines.length) return;
+
+    const bounds = boardRef.current.getBoundingClientRect();
+    setLines((current) => beautifyLines(current, bounds));
+    setStyled(true);
+  }
+
   return (
     <section className="map-section" id="map-layout" aria-labelledby="map-layout-title">
       <header className="map-section-heading">
@@ -509,6 +620,15 @@ export default function MapPlanner({
               Линии
             </button>
           </div>
+          <button
+            className={`beautify-lines${styled ? " active" : ""}`}
+            type="button"
+            disabled={lines.length === 0}
+            onClick={beautifyMap}
+          >
+            <span aria-hidden="true">✦</span>
+            Выровнять и стилизовать
+          </button>
           <span className="line-count" aria-live="polite">{lineCountLabel}</span>
           <button
             className="undo-line"
@@ -532,15 +652,36 @@ export default function MapPlanner({
           onPointerCancel={cancelPointerAction}
         >
           <div className="map-board-texture" aria-hidden="true" />
-          <svg className="map-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <svg
+            className={`map-lines${styled ? " styled" : ""}`}
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <defs>
+              <filter id={`rough-ink-${locationType}`} x="-4%" y="-4%" width="108%" height="108%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="7" result="noise" />
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.55" />
+              </filter>
+            </defs>
             {lines.map((line) => (
-              <line
-                x1={line.x1}
-                y1={line.y1}
-                x2={line.x2}
-                y2={line.y2}
-                key={line.id}
-              />
+              <g key={line.id}>
+                <line
+                  className="line-wear"
+                  x1={line.x1}
+                  y1={line.y1}
+                  x2={line.x2}
+                  y2={line.y2}
+                />
+                <line
+                  className="line-ink"
+                  x1={line.x1}
+                  y1={line.y1}
+                  x2={line.x2}
+                  y2={line.y2}
+                  style={styled ? { filter: `url(#rough-ink-${locationType})` } : undefined}
+                />
+              </g>
             ))}
             {draftLine ? (
               <line

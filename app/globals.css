@@ -511,6 +511,7 @@ h2 {
   width: min(920px, 100%);
   min-height: 48px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   align-self: center;
   gap: 12px;
@@ -557,6 +558,38 @@ h2 {
   margin-left: auto;
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
+}
+
+.beautify-lines {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 0;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 16px;
+}
+
+.beautify-lines span {
+  color: #f1a28f;
+  font-size: 17px;
+}
+
+.beautify-lines:hover,
+.beautify-lines:focus-visible,
+.beautify-lines.active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.beautify-lines:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
 }
 
 .undo-line {
@@ -628,11 +661,30 @@ h2 {
   pointer-events: none;
 }
 
-.map-lines line {
+.map-lines .line-ink {
   stroke: rgba(29, 42, 38, 0.84);
   stroke-width: 3;
   stroke-linecap: square;
   vector-effect: non-scaling-stroke;
+}
+
+.map-lines .line-wear {
+  display: none;
+}
+
+.map-lines.styled .line-wear {
+  display: block;
+  stroke: rgba(117, 88, 53, 0.22);
+  stroke-width: 5.5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-lines.styled .line-ink {
+  stroke: rgba(65, 49, 32, 0.88);
+  stroke-width: 2.7;
+  stroke-linecap: round;
+  stroke-dasharray: 28 0.8 11 1.2;
 }
 
 .map-lines .draft-line {
@@ -931,6 +983,12 @@ h2 {
     padding: 0 12px;
   }
 
+  .beautify-lines {
+    width: calc(100% - 56px);
+    order: 3;
+    justify-content: center;
+  }
+
   .line-count {
     display: none;
   }
@@ -939,6 +997,7 @@ h2 {
     width: 44px;
     height: 44px;
     margin-left: auto;
+    order: 4;
   }
 
   .map-board {
