@@ -497,12 +497,85 @@ h2 {
 .map-workspace {
   min-height: 660px;
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 14px;
   overflow: hidden;
   padding: clamp(28px, 4vw, 58px);
   background: #294d43;
   border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.map-toolbar {
+  width: min(920px, 100%);
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: 12px;
+  color: white;
+}
+
+.map-mode-switch {
+  display: inline-flex;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+}
+
+.map-mode-switch button {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 0;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 16px;
+}
+
+.map-mode-switch button:last-child {
+  border-right: 0;
+}
+
+.map-mode-switch button.active {
+  background: white;
+  color: var(--green);
+}
+
+.map-mode-switch button span {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.line-count {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+.undo-line {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 0;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.undo-line:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 
 .map-board {
@@ -522,6 +595,10 @@ h2 {
   box-shadow: 0 22px 46px rgba(12, 29, 24, 0.4), inset 0 0 38px rgba(95, 67, 37, 0.13);
 }
 
+.map-board.mode-lines {
+  cursor: crosshair;
+}
+
 .map-board-texture {
   position: absolute;
   z-index: 0;
@@ -539,6 +616,29 @@ h2 {
   inset: 0;
   border: 10px solid rgba(93, 67, 40, 0.06);
   pointer-events: none;
+}
+
+.map-lines {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.map-lines line {
+  stroke: rgba(29, 42, 38, 0.84);
+  stroke-width: 3;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-lines .draft-line {
+  stroke: var(--red);
+  stroke-width: 2.5;
+  stroke-dasharray: 7 5;
 }
 
 .map-size {
@@ -591,6 +691,11 @@ h2 {
 
 .map-point.dragging {
   cursor: grabbing;
+}
+
+.map-board.mode-lines .map-point {
+  pointer-events: none;
+  opacity: 0.82;
 }
 
 .map-start-point {
@@ -815,6 +920,25 @@ h2 {
     min-height: 480px;
     justify-content: flex-start;
     padding: 20px;
+  }
+
+  .map-toolbar {
+    width: 100%;
+  }
+
+  .map-mode-switch button {
+    min-height: 44px;
+    padding: 0 12px;
+  }
+
+  .line-count {
+    display: none;
+  }
+
+  .undo-line {
+    width: 44px;
+    height: 44px;
+    margin-left: auto;
   }
 
   .map-board {
