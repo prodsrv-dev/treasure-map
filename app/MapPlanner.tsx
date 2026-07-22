@@ -34,6 +34,7 @@ type StoredMap = {
 };
 
 type ResizeAxis = "x" | "y" | "xy";
+type PointId = number | "start";
 
 const DEFAULT_SIZE: BoardSize = { width: 920, height: 540 };
 const MIN_SIZE: BoardSize = { width: 360, height: 320 };
@@ -105,7 +106,7 @@ export default function MapPlanner({
   const [size, setSize] = useState<BoardSize>(DEFAULT_SIZE);
   const [positions, setPositions] = useState<Record<string, PointPosition>>({});
   const [ready, setReady] = useState(false);
-  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [draggingId, setDraggingId] = useState<PointId | null>(null);
   const [resizing, setResizing] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -118,9 +119,11 @@ export default function MapPlanner({
   } | null>(null);
 
   const placedCount = useMemo(
-    () => places.filter((place) => positions[String(place.id)]).length,
+    () => places.filter((place) => positions[String(place.id)]).length
+      + (positions.start ? 1 : 0),
     [places, positions],
   );
+  const totalPoints = places.length + 1;
 
   useEffect(() => {
     let stored: StoredMap | null = null;
@@ -182,13 +185,13 @@ export default function MapPlanner({
     }));
   }
 
-  function startPointDrag(event: ReactPointerEvent<HTMLButtonElement>, id: number) {
+  function startPointDrag(event: ReactPointerEvent<HTMLButtonElement>, id: PointId) {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     setDraggingId(id);
   }
 
-  function movePointWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, id: number) {
+  function movePointWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, id: PointId) {
     const direction = {
       ArrowLeft: [-2, 0],
       ArrowRight: [2, 0],
@@ -288,7 +291,7 @@ export default function MapPlanner({
           <h2 id="map-layout-title">Расставим точки на карте</h2>
         </div>
         <div className="map-status" aria-live="polite">
-          <strong>{placedCount} из {places.length}</strong>
+          <strong>{placedCount} из {totalPoints}</strong>
           <span>точек расставлено</span>
         </div>
       </header>
@@ -307,13 +310,31 @@ export default function MapPlanner({
             {Math.round(size.width)} × {Math.round(size.height)}
           </div>
 
+          <button
+            className={`map-point map-start-point${positions.start ? " placed" : " piled"}${draggingId === "start" ? " dragging" : ""}`}
+            type="button"
+            style={positions.start
+              ? { left: `${positions.start.x}%`, top: `${positions.start.y}%` }
+              : {
+                "--pile-offset": "42px",
+                "--pile-angle": "-10deg",
+                "--pile-z": 19,
+              } as CSSProperties}
+            aria-label="Точка старта"
+            title="Точка старта"
+            onPointerDown={(event) => startPointDrag(event, "start")}
+            onKeyDown={(event) => movePointWithKeyboard(event, "start")}
+          >
+            <span aria-hidden="true">⚑</span>
+          </button>
+
           {places.map((place, index) => {
             const position = positions[String(place.id)];
             const pointStyle: CSSProperties = position
               ? { left: `${position.x}%`, top: `${position.y}%` }
               : {
-                "--pile-offset": `${42 + index * 7}px`,
-                "--pile-angle": `${(index - 2) * 4}deg`,
+                "--pile-offset": `${49 + index * 7}px`,
+                "--pile-angle": `${(index - 1) * 4}deg`,
                 "--pile-z": 18 - index,
               } as CSSProperties;
             const name = `${index + 1}. ${place.first} — ${place.second}`;

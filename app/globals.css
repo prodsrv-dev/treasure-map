@@ -593,6 +593,15 @@ h2 {
   cursor: grabbing;
 }
 
+.map-start-point {
+  background: var(--green);
+  font-size: 22px;
+}
+
+.map-start-point span {
+  transform: translateY(-1px);
+}
+
 .resize-edge,
 .resize-corner {
   position: absolute;
