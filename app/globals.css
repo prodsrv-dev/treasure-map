@@ -759,6 +759,232 @@ h2 {
   transform: translateY(-1px);
 }
 
+.map-point.customized {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 22px;
+}
+
+.marker-tentacles {
+  background: #7b425c;
+}
+
+.marker-steam {
+  background: var(--blue);
+}
+
+.marker-fangs {
+  background: var(--red-dark);
+}
+
+.marker-eye {
+  background: #9a7134;
+}
+
+.marker-shadow {
+  background: #343b39;
+}
+
+.marker-spark {
+  background: #b86635;
+}
+
+.map-workspace-footer {
+  width: min(920px, 100%);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.map-next-button {
+  min-height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  border: 1px solid var(--red);
+  border-radius: 0;
+  background: var(--red);
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 0 22px;
+}
+
+.map-next-button span {
+  font-size: 20px;
+}
+
+.riddle-section {
+  background: var(--paper);
+  scroll-margin-top: 20px;
+}
+
+.riddle-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 28px;
+  align-items: start;
+  padding: clamp(58px, 7vw, 92px) clamp(28px, 5vw, 88px);
+  background: var(--green);
+  color: white;
+}
+
+.riddle-heading .eyebrow {
+  color: #f1a28f;
+}
+
+.riddle-heading h2 {
+  max-width: 760px;
+}
+
+.regenerate-riddles {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 0;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 18px;
+}
+
+.regenerate-riddles span {
+  color: #f1a28f;
+  font-size: 18px;
+}
+
+.regenerate-riddles:hover,
+.regenerate-riddles:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.riddle-list {
+  display: grid;
+  gap: 12px;
+  padding: clamp(34px, 5vw, 72px) clamp(28px, 5vw, 88px) clamp(68px, 8vw, 120px);
+}
+
+.riddle-item {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.52fr) minmax(220px, 0.74fr) minmax(210px, 0.8fr) minmax(320px, 1.55fr);
+  gap: 22px;
+  align-items: start;
+  border: 1px solid rgba(23, 34, 31, 0.17);
+  border-radius: 6px;
+  background: var(--paper-light);
+  padding: 20px;
+}
+
+.riddle-place {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 10px;
+  align-items: baseline;
+  padding-top: 5px;
+}
+
+.riddle-place > span {
+  grid-row: 1 / 3;
+  color: var(--blue);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+}
+
+.riddle-place strong {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.riddle-place small {
+  overflow-wrap: anywhere;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.marker-picker {
+  display: grid;
+  grid-template-columns: repeat(6, 34px);
+  gap: 5px;
+}
+
+.marker-choice {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  line-height: 1;
+  opacity: 0.48;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.marker-choice:hover,
+.marker-choice:focus-visible,
+.marker-choice.active {
+  border-color: white;
+  box-shadow: 0 0 0 2px var(--ink);
+  opacity: 1;
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.monster-name,
+.riddle-text {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.monster-name > span,
+.riddle-text > span {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.monster-name input,
+.riddle-text textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+
+.monster-name input {
+  height: 42px;
+  padding: 0 11px;
+}
+
+.riddle-text textarea {
+  min-height: 94px;
+  line-height: 1.45;
+  padding: 10px 11px;
+  resize: vertical;
+}
+
+.monster-name input:focus,
+.riddle-text textarea:focus {
+  border-color: var(--green);
+}
+
 .resize-edge,
 .resize-corner {
   position: absolute;
@@ -998,6 +1224,40 @@ h2 {
     height: 44px;
     margin-left: auto;
     order: 4;
+  }
+
+  .map-next-button {
+    width: 100%;
+  }
+
+  .riddle-heading {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 18px;
+    padding: 54px 20px;
+  }
+
+  .regenerate-riddles {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .riddle-list {
+    padding: 28px 20px 72px;
+  }
+
+  .riddle-item {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .marker-picker {
+    grid-template-columns: repeat(6, 38px);
+  }
+
+  .marker-choice {
+    width: 38px;
+    height: 38px;
   }
 
   .map-board {

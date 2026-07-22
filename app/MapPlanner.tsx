@@ -9,6 +9,12 @@ import {
   useRef,
   useState,
 } from "react";
+import RiddleDesigner, {
+  AdventureEntry,
+  MarkerKind,
+  createDefaultAdventure,
+  markerCatalog,
+} from "./RiddleDesigner";
 
 type LocationType = "apartment" | "dacha" | "yard";
 
@@ -33,6 +39,8 @@ type StoredMap = {
   positions: Record<string, PointPosition>;
   lines: LineSegment[];
   styled: boolean;
+  adventureOpen: boolean;
+  adventures: Record<string, AdventureEntry>;
 };
 
 type ResizeAxis = "x" | "y" | "xy";
@@ -289,6 +297,24 @@ function restoreMap(value: string | null): StoredMap | null {
         }];
       })
       : [];
+    const adventures = stored.adventures && typeof stored.adventures === "object"
+      ? Object.fromEntries(
+        Object.entries(stored.adventures).flatMap(([id, entry]) => {
+          if (
+            !entry
+            || !markerCatalog.some((marker) => marker.id === entry.marker)
+            || typeof entry.monster !== "string"
+            || typeof entry.riddle !== "string"
+          ) return [];
+
+          return [[id, {
+            marker: entry.marker as MarkerKind,
+            monster: entry.monster,
+            riddle: entry.riddle,
+          }]];
+        }),
+      )
+      : {};
 
     return {
       size: {
@@ -298,6 +324,8 @@ function restoreMap(value: string | null): StoredMap | null {
       positions,
       lines,
       styled: stored.styled === true,
+      adventureOpen: stored.adventureOpen === true,
+      adventures,
     };
   } catch {
     return null;
@@ -317,6 +345,8 @@ export default function MapPlanner({
   const [draftLine, setDraftLine] = useState<DraftLine | null>(null);
   const [mode, setMode] = useState<DrawingMode>("points");
   const [styled, setStyled] = useState(false);
+  const [adventureOpen, setAdventureOpen] = useState(false);
+  const [adventures, setAdventures] = useState<Record<string, AdventureEntry>>({});
   const [ready, setReady] = useState(false);
   const [draggingId, setDraggingId] = useState<PointId | null>(null);
   const [resizing, setResizing] = useState(false);
@@ -357,6 +387,8 @@ export default function MapPlanner({
       setPositions(stored.positions);
       setLines(stored.lines);
       setStyled(stored.styled);
+      setAdventureOpen(stored.adventureOpen);
+      setAdventures(stored.adventures);
       nextLineId.current = Math.max(0, ...stored.lines.map((line) => line.id)) + 1;
     }
     setReady(true);
@@ -392,11 +424,30 @@ export default function MapPlanner({
         positions,
         lines,
         styled,
+        adventureOpen,
+        adventures,
       }));
     } catch {
       // Storage can be disabled by browser privacy settings.
     }
-  }, [lines, locationType, positions, ready, size, styled]);
+  }, [adventureOpen, adventures, lines, locationType, positions, ready, size, styled]);
+
+  useEffect(() => {
+    if (!adventureOpen) return;
+
+    setAdventures((current) => {
+      let changed = false;
+      const next = { ...current };
+      places.forEach((place, index) => {
+        const key = String(place.id);
+        if (!next[key]) {
+          next[key] = createDefaultAdventure(place, index, locationType);
+          changed = true;
+        }
+      });
+      return changed ? next : current;
+    });
+  }, [adventureOpen, locationType, places]);
 
   function updatePointFromPointer(event: ReactPointerEvent) {
     if (mode !== "points" || draggingId === null || !boardRef.current) return;
@@ -583,8 +634,24 @@ export default function MapPlanner({
     setStyled(true);
   }
 
+  function openRiddleDesigner() {
+    setAdventures((current) => {
+      const next = { ...current };
+      places.forEach((place, index) => {
+        const key = String(place.id);
+        if (!next[key]) next[key] = createDefaultAdventure(place, index, locationType);
+      });
+      return next;
+    });
+    setAdventureOpen(true);
+    requestAnimationFrame(() => {
+      document.getElementById("riddles")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   return (
-    <section className="map-section" id="map-layout" aria-labelledby="map-layout-title">
+    <>
+      <section className="map-section" id="map-layout" aria-labelledby="map-layout-title">
       <header className="map-section-heading">
         <p className="step-number">03</p>
         <div>
@@ -725,6 +792,10 @@ export default function MapPlanner({
 
           {places.map((place, index) => {
             const position = positions[String(place.id)];
+            const adventure = adventures[String(place.id)];
+            const marker = adventure
+              ? markerCatalog.find((option) => option.id === adventure.marker)
+              : null;
             const pointStyle: CSSProperties = position
               ? { left: `${position.x}%`, top: `${position.y}%` }
               : {
@@ -736,7 +807,7 @@ export default function MapPlanner({
 
             return (
               <button
-                className={`map-point${position ? " placed" : " piled"}${draggingId === place.id ? " dragging" : ""}`}
+                className={`map-point${marker ? ` marker-${marker.id} customized` : ""}${position ? " placed" : " piled"}${draggingId === place.id ? " dragging" : ""}`}
                 type="button"
                 style={pointStyle}
                 aria-label={name}
@@ -746,7 +817,7 @@ export default function MapPlanner({
                 onKeyDown={(event) => movePointWithKeyboard(event, place.id)}
                 key={place.id}
               >
-                {index + 1}
+                {marker?.symbol ?? index + 1}
               </button>
             );
           })}
@@ -776,7 +847,23 @@ export default function MapPlanner({
             onKeyDown={(event) => resizeWithKeyboard(event, "xy")}
           />
         </div>
+        <div className="map-workspace-footer">
+          <button className="map-next-button" type="button" onClick={openRiddleDesigner}>
+            {adventureOpen ? "Перейти к загадкам" : "Продолжить"}
+            <span aria-hidden="true">→</span>
+          </button>
+        </div>
       </div>
-    </section>
+      </section>
+
+      {adventureOpen ? (
+        <RiddleDesigner
+          locationType={locationType}
+          places={places}
+          adventures={adventures}
+          onChange={setAdventures}
+        />
+      ) : null}
+    </>
   );
 }
