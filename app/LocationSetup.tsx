@@ -20,6 +20,7 @@ type LocationDraft = {
 };
 
 const DRAFT_STORAGE_KEY = "treasure-map:location-draft:v1";
+const SCROLL_STORAGE_KEY = "treasure-map:scroll-position:v1";
 
 const locationOptions: Array<{ value: LocationType; label: string }> = [
   { value: "apartment", label: "Квартира" },
@@ -142,6 +143,32 @@ export default function LocationSetup() {
   const [draftRestored, setDraftRestored] = useState(false);
   const nextId = useRef(4);
   const locationDrafts = useRef<Partial<Record<LocationType, PlaceItem[]>>>({});
+  const scrollRestored = useRef(false);
+
+  useEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+
+    function saveScrollPosition() {
+      if (!scrollRestored.current) return;
+
+      try {
+        window.sessionStorage.setItem(SCROLL_STORAGE_KEY, String(window.scrollY));
+      } catch {
+        // The page still works when session storage is unavailable.
+      }
+    }
+
+    window.addEventListener("pagehide", saveScrollPosition);
+    window.addEventListener("beforeunload", saveScrollPosition);
+
+    return () => {
+      saveScrollPosition();
+      window.history.scrollRestoration = previousScrollRestoration;
+      window.removeEventListener("pagehide", saveScrollPosition);
+      window.removeEventListener("beforeunload", saveScrollPosition);
+    };
+  }, []);
 
   useEffect(() => {
     let draft: LocationDraft | null = null;
@@ -162,6 +189,25 @@ export default function LocationSetup() {
 
     setDraftRestored(true);
   }, []);
+
+  useEffect(() => {
+    if (!draftRestored || scrollRestored.current) return;
+
+    let savedPosition = 0;
+    try {
+      const storedPosition = Number(window.sessionStorage.getItem(SCROLL_STORAGE_KEY));
+      if (Number.isFinite(storedPosition) && storedPosition > 0) savedPosition = storedPosition;
+    } catch {
+      // Keep the default top position when session storage is unavailable.
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: savedPosition, left: 0, behavior: "auto" });
+        scrollRestored.current = true;
+      });
+    });
+  }, [draftRestored]);
 
   useEffect(() => {
     if (!draftRestored) return;
