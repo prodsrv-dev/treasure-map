@@ -693,6 +693,31 @@ h2 {
   stroke-dasharray: 7 5;
 }
 
+.map-lines .map-route-wear,
+.map-lines .map-route-ink {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-lines .map-route-wear {
+  stroke: rgba(244, 230, 198, 0.88);
+  stroke-width: 7;
+}
+
+.map-lines .map-route-ink {
+  stroke: rgba(45, 49, 42, 0.9);
+  stroke-width: 3.2;
+  stroke-dasharray: 8 7;
+}
+
+.map-lines .route-arrow {
+  fill: var(--red);
+  stroke: rgba(77, 43, 27, 0.85);
+  stroke-width: 0.7;
+}
+
 .map-size {
   position: absolute;
   z-index: 3;
@@ -760,11 +785,19 @@ h2 {
 }
 
 .map-point.customized {
-  width: 72px;
-  height: 72px;
-  border: 1px solid rgba(92, 65, 43, 0.46);
-  background: rgba(246, 232, 199, 0.9);
-  box-shadow: 0 6px 14px rgba(73, 39, 27, 0.28);
+  width: 96px;
+  height: 96px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.map-point.customized:hover,
+.map-point.customized:focus-visible,
+.map-point.customized.dragging {
+  box-shadow: none;
 }
 
 .map-monster-image {
@@ -774,6 +807,22 @@ h2 {
   pointer-events: none;
   user-select: none;
   filter: drop-shadow(0 3px 2px rgba(67, 42, 24, 0.25));
+}
+
+.map-point-order {
+  width: 25px;
+  height: 25px;
+  position: absolute;
+  right: 0;
+  bottom: 4px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #f4e8cd;
+  border-radius: 50%;
+  background: var(--red);
+  color: white;
+  font: 700 13px/1 Georgia, "Times New Roman", serif;
+  box-shadow: 0 3px 7px rgba(70, 38, 24, 0.28);
 }
 
 .marker-tentacles {
@@ -798,6 +847,10 @@ h2 {
 
 .marker-spark {
   border-color: #b86635;
+}
+
+.marker-faucet {
+  border-color: #6d7f72;
 }
 
 .map-workspace-footer {

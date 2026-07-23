@@ -8,7 +8,7 @@ type RiddlePlace = {
   second: string;
 };
 
-export type MarkerKind = "tentacles" | "steam" | "fangs" | "eye" | "shadow" | "spark";
+export type MarkerKind = "tentacles" | "steam" | "fangs" | "eye" | "shadow" | "spark" | "faucet";
 
 export type AdventureEntry = {
   marker: MarkerKind;
@@ -23,6 +23,7 @@ export const markerCatalog: Array<{ id: MarkerKind; image: string; label: string
   { id: "eye", image: "/monsters/deep-eye.png", label: "Глубинный глаз" },
   { id: "shadow", image: "/monsters/wardrobe-shadow.png", label: "Шкафная тень" },
   { id: "spark", image: "/monsters/spark-trickster.png", label: "Искристый шалун" },
+  { id: "faucet", image: "/monsters/brass-long-nose.png", label: "Латунный длиннонос" },
 ];
 
 const genericMonsters: Array<Pick<AdventureEntry, "marker" | "monster">> = [
@@ -55,6 +56,14 @@ export function createDefaultAdventure(
     : location
       ? `Там, где подходит примета «${location}»`
       : "В одном из дальних уголков";
+
+  if (normalized.includes("кран") || normalized.includes("смесител")) {
+    return {
+      marker: "faucet",
+      monster: "Латунный Длиннонос",
+      riddle: `${placePhrase} караулит Латунный Длиннонос. Два круглых глаза-крутилки смотрят в разные стороны: один сердится холодом, другой пышет жаром. Между ними торчит длинный нос, из которого по команде льётся вода. Найди этого водяного стража и загляни рядом с ним.`,
+    };
+  }
 
   if (normalized.includes("чайник")) {
     return {

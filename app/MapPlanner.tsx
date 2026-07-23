@@ -73,6 +73,26 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function smoothRoutePath(points: PointPosition[]) {
+  if (points.length < 2) return "";
+
+  return points.slice(0, -1).reduce((path, point, index) => {
+    const previous = points[index - 1] ?? point;
+    const next = points[index + 1];
+    const afterNext = points[index + 2] ?? next;
+    const firstControl = {
+      x: point.x + (next.x - previous.x) / 6,
+      y: point.y + (next.y - previous.y) / 6,
+    };
+    const secondControl = {
+      x: next.x - (afterNext.x - point.x) / 6,
+      y: next.y - (afterNext.y - point.y) / 6,
+    };
+
+    return `${path} C ${firstControl.x} ${firstControl.y}, ${secondControl.x} ${secondControl.y}, ${next.x} ${next.y}`;
+  }, `M ${points[0].x} ${points[0].y}`);
+}
+
 function availableBoardWidth(workspace: HTMLDivElement | null, fallback: number) {
   if (!workspace) return fallback;
 
@@ -366,6 +386,14 @@ export default function MapPlanner({
       + (positions.start ? 1 : 0),
     [places, positions],
   );
+  const routePoints = useMemo(
+    () => [
+      positions.start,
+      ...places.map((place) => positions[String(place.id)]),
+    ].filter((point): point is PointPosition => Boolean(point)),
+    [places, positions],
+  );
+  const routePath = useMemo(() => smoothRoutePath(routePoints), [routePoints]);
   const totalPoints = places.length + 1;
   const lineCountLabel = lines.length === 1
     ? "1 линия"
@@ -383,12 +411,20 @@ export default function MapPlanner({
     }
 
     if (stored) {
+      const restoredAdventures = { ...stored.adventures };
+      places.forEach((place, index) => {
+        const key = String(place.id);
+        const suggested = createDefaultAdventure(place, index, locationType);
+        if (suggested.marker === "faucet" && restoredAdventures[key]?.marker === "shadow") {
+          restoredAdventures[key] = suggested;
+        }
+      });
       setSize(stored.size);
       setPositions(stored.positions);
       setLines(stored.lines);
       setStyled(stored.styled);
       setAdventureOpen(stored.adventureOpen);
-      setAdventures(stored.adventures);
+      setAdventures(restoredAdventures);
       nextLineId.current = Math.max(0, ...stored.lines.map((line) => line.id)) + 1;
     }
     setReady(true);
@@ -717,7 +753,7 @@ export default function MapPlanner({
         </div>
 
         <div
-          className={`map-board mode-${mode}${resizing ? " resizing" : ""}`}
+          className={`map-board mode-${mode}${resizing ? " resizing" : ""}${adventureOpen ? " adventure-open" : ""}`}
           ref={boardRef}
           style={{ width: `${size.width}px`, height: `${size.height}px` }}
           onPointerDown={startLineDrawing}
@@ -737,6 +773,17 @@ export default function MapPlanner({
                 <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="7" result="noise" />
                 <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.55" />
               </filter>
+              <marker
+                id={`route-arrow-${locationType}`}
+                viewBox="0 0 10 10"
+                refX="8"
+                refY="5"
+                markerWidth="5"
+                markerHeight="5"
+                orient="auto-start-reverse"
+              >
+                <path className="route-arrow" d="M 0 0 L 10 5 L 0 10 z" />
+              </marker>
             </defs>
             {lines.map((line) => (
               <g key={line.id}>
@@ -757,6 +804,16 @@ export default function MapPlanner({
                 />
               </g>
             ))}
+            {adventureOpen && routePath ? (
+              <g className="map-route">
+                <path className="map-route-wear" d={routePath} />
+                <path
+                  className="map-route-ink"
+                  d={routePath}
+                  markerEnd={`url(#route-arrow-${locationType})`}
+                />
+              </g>
+            ) : null}
             {draftLine ? (
               <line
                 className="draft-line"
@@ -818,7 +875,12 @@ export default function MapPlanner({
                 key={place.id}
               >
                 {marker
-                  ? <img className="map-monster-image" src={marker.image} alt="" draggable={false} />
+                  ? (
+                    <>
+                      <img className="map-monster-image" src={marker.image} alt="" draggable={false} />
+                      <span className="map-point-order" aria-hidden="true">{index + 1}</span>
+                    </>
+                  )
                   : index + 1}
               </button>
             );
