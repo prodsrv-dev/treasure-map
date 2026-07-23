@@ -57,6 +57,15 @@ type LineSegment = {
 
 type DraftLine = Omit<LineSegment, "id">;
 
+type RouteDoorway = PointPosition & {
+  angle: number;
+};
+
+type RouteLayout = {
+  path: string;
+  doorways: RouteDoorway[];
+};
+
 const DEFAULT_SIZE: BoardSize = { width: 920, height: 540 };
 const MIN_SIZE: BoardSize = { width: 360, height: 320 };
 const boundaryLabel: Record<LocationType, string> = {
@@ -73,24 +82,271 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function smoothRoutePath(points: PointPosition[]) {
-  if (points.length < 2) return "";
+function toPixels(point: PointPosition, size: BoardSize) {
+  return {
+    x: (point.x / 100) * size.width,
+    y: (point.y / 100) * size.height,
+  };
+}
 
-  return points.slice(0, -1).reduce((path, point, index) => {
-    const previous = points[index - 1] ?? point;
-    const next = points[index + 1];
-    const afterNext = points[index + 2] ?? next;
-    const firstControl = {
-      x: point.x + (next.x - previous.x) / 6,
-      y: point.y + (next.y - previous.y) / 6,
-    };
-    const secondControl = {
-      x: next.x - (afterNext.x - point.x) / 6,
-      y: next.y - (afterNext.y - point.y) / 6,
-    };
+function pixelDistance(first: PointPosition, second: PointPosition, size: BoardSize) {
+  const a = toPixels(first, size);
+  const b = toPixels(second, size);
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
 
-    return `${path} C ${firstControl.x} ${firstControl.y}, ${secondControl.x} ${secondControl.y}, ${next.x} ${next.y}`;
-  }, `M ${points[0].x} ${points[0].y}`);
+function distanceToWall(point: PointPosition, wall: LineSegment, size: BoardSize) {
+  const pixelPoint = toPixels(point, size);
+  const start = toPixels({ x: wall.x1, y: wall.y1 }, size);
+  const end = toPixels({ x: wall.x2, y: wall.y2 }, size);
+  const lengthSquared = (end.x - start.x) ** 2 + (end.y - start.y) ** 2;
+  if (lengthSquared === 0) return Math.hypot(pixelPoint.x - start.x, pixelPoint.y - start.y);
+
+  const progress = clamp(
+    ((pixelPoint.x - start.x) * (end.x - start.x)
+      + (pixelPoint.y - start.y) * (end.y - start.y)) / lengthSquared,
+    0,
+    1,
+  );
+  const nearest = {
+    x: start.x + (end.x - start.x) * progress,
+    y: start.y + (end.y - start.y) * progress,
+  };
+  return Math.hypot(pixelPoint.x - nearest.x, pixelPoint.y - nearest.y);
+}
+
+function segmentIntersection(
+  start: PointPosition,
+  end: PointPosition,
+  wall: LineSegment,
+  size: BoardSize,
+): RouteDoorway | null {
+  const a = toPixels(start, size);
+  const b = toPixels(end, size);
+  const c = toPixels({ x: wall.x1, y: wall.y1 }, size);
+  const d = toPixels({ x: wall.x2, y: wall.y2 }, size);
+  const denominator = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
+  if (Math.abs(denominator) < 0.001) return null;
+
+  const routeProgress = ((a.x - c.x) * (c.y - d.y) - (a.y - c.y) * (c.x - d.x)) / denominator;
+  const wallProgress = -((a.x - b.x) * (a.y - c.y) - (a.y - b.y) * (a.x - c.x)) / denominator;
+  if (routeProgress <= 0.001 || routeProgress >= 0.999 || wallProgress < 0 || wallProgress > 1) {
+    return null;
+  }
+
+  return {
+    x: start.x + (end.x - start.x) * routeProgress,
+    y: start.y + (end.y - start.y) * routeProgress,
+    angle: Math.atan2(d.y - c.y, d.x - c.x) * (180 / Math.PI),
+  };
+}
+
+function wallCrossings(
+  start: PointPosition,
+  end: PointPosition,
+  walls: LineSegment[],
+  size: BoardSize,
+) {
+  return walls.flatMap((wall) => {
+    const crossing = segmentIntersection(start, end, wall, size);
+    return crossing ? [crossing] : [];
+  });
+}
+
+function runsTooCloseToWall(
+  start: PointPosition,
+  end: PointPosition,
+  walls: LineSegment[],
+  size: BoardSize,
+  clearance = 10,
+) {
+  return [0.2, 0.4, 0.6, 0.8].some((progress) => {
+    const sample = {
+      x: start.x + (end.x - start.x) * progress,
+      y: start.y + (end.y - start.y) * progress,
+    };
+    return walls.some((wall) => distanceToWall(sample, wall, size) < clearance);
+  });
+}
+
+function simplifyStrictRoute(points: PointPosition[], walls: LineSegment[], size: BoardSize) {
+  if (points.length < 3) return points;
+
+  const simplified = [points[0]];
+  let index = 0;
+  while (index < points.length - 1) {
+    let nextIndex = points.length - 1;
+    while (nextIndex > index + 1) {
+      if (
+        wallCrossings(points[index], points[nextIndex], walls, size).length === 0
+        && !runsTooCloseToWall(points[index], points[nextIndex], walls, size, 8)
+      ) break;
+      nextIndex -= 1;
+    }
+    simplified.push(points[nextIndex]);
+    index = nextIndex;
+  }
+  return simplified;
+}
+
+function simplifyDoorRoute(points: PointPosition[], size: BoardSize) {
+  if (points.length < 3) return points;
+
+  const simplified = [points[0]];
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = toPixels(points[index - 1], size);
+    const current = toPixels(points[index], size);
+    const next = toPixels(points[index + 1], size);
+    const first = { x: current.x - previous.x, y: current.y - previous.y };
+    const second = { x: next.x - current.x, y: next.y - current.y };
+    const firstLength = Math.hypot(first.x, first.y);
+    const secondLength = Math.hypot(second.x, second.y);
+    const turn = firstLength && secondLength
+      ? Math.abs(first.x * second.y - first.y * second.x) / (firstLength * secondLength)
+      : 0;
+    if (turn > 0.08) simplified.push(points[index]);
+  }
+  simplified.push(points.at(-1)!);
+  return simplified;
+}
+
+function findGridRoute(
+  start: PointPosition,
+  end: PointPosition,
+  walls: LineSegment[],
+  size: BoardSize,
+  allowDoorways: boolean,
+) {
+  const step = 2.5;
+  const cellCount = Math.round(100 / step);
+  const cellFor = (point: PointPosition) => ({
+    x: clamp(Math.round(point.x / step), 1, cellCount - 1),
+    y: clamp(Math.round(point.y / step), 1, cellCount - 1),
+  });
+  const startCell = cellFor(start);
+  const endCell = cellFor(end);
+  const keyFor = (x: number, y: number) => `${x}:${y}`;
+  const startKey = keyFor(startCell.x, startCell.y);
+  const endKey = keyFor(endCell.x, endCell.y);
+  if (startKey === endKey) return [start, end];
+
+  const pointFor = (x: number, y: number) => {
+    const key = keyFor(x, y);
+    if (key === startKey) return start;
+    if (key === endKey) return end;
+    return { x: x * step, y: y * step };
+  };
+  const parseKey = (key: string) => {
+    const [x, y] = key.split(":").map(Number);
+    return { x, y };
+  };
+  const open = new Set([startKey]);
+  const cameFrom = new Map<string, string>();
+  const costs = new Map([[startKey, 0]]);
+  const estimates = new Map([[startKey, pixelDistance(start, end, size)]]);
+  const directions = [-1, 0, 1].flatMap((x) => [-1, 0, 1]
+    .filter((y) => x !== 0 || y !== 0)
+    .map((y) => ({ x, y })));
+
+  for (let iteration = 0; open.size && iteration < 10000; iteration += 1) {
+    const currentKey = [...open].reduce((best, candidate) => (
+      (estimates.get(candidate) ?? Infinity) < (estimates.get(best) ?? Infinity)
+        ? candidate
+        : best
+    ));
+    if (currentKey === endKey) {
+      const routeKeys = [currentKey];
+      let cursor = currentKey;
+      while (cameFrom.has(cursor)) {
+        cursor = cameFrom.get(cursor)!;
+        routeKeys.push(cursor);
+      }
+      return routeKeys.reverse().map((key) => {
+        const cell = parseKey(key);
+        return pointFor(cell.x, cell.y);
+      });
+    }
+
+    open.delete(currentKey);
+    const currentCell = parseKey(currentKey);
+    const currentPoint = pointFor(currentCell.x, currentCell.y);
+    directions.forEach((direction) => {
+      const nextCell = { x: currentCell.x + direction.x, y: currentCell.y + direction.y };
+      if (
+        nextCell.x < 1 || nextCell.x >= cellCount
+        || nextCell.y < 1 || nextCell.y >= cellCount
+      ) return;
+
+      const nextKey = keyFor(nextCell.x, nextCell.y);
+      const nextPoint = pointFor(nextCell.x, nextCell.y);
+      const crossings = wallCrossings(currentPoint, nextPoint, walls, size);
+      const nearWall = runsTooCloseToWall(currentPoint, nextPoint, walls, size);
+      const isEndpoint = nextKey === endKey;
+      if (!allowDoorways && (crossings.length > 0 || (nearWall && !isEndpoint))) return;
+
+      const nearestWall = walls.reduce(
+        (nearest, wall) => Math.min(nearest, distanceToWall(nextPoint, wall, size)),
+        Infinity,
+      );
+      const doorwayCost = allowDoorways ? crossings.length * 500 : 0;
+      const wallCost = allowDoorways && nearestWall < 12 ? (12 - nearestWall) * 4 : 0;
+      const previousKey = cameFrom.get(currentKey);
+      let turnCost = 0;
+      if (previousKey) {
+        const previousCell = parseKey(previousKey);
+        const previousDirection = {
+          x: currentCell.x - previousCell.x,
+          y: currentCell.y - previousCell.y,
+        };
+        if (previousDirection.x !== direction.x || previousDirection.y !== direction.y) turnCost = 2;
+      }
+      const nextCost = (costs.get(currentKey) ?? Infinity)
+        + pixelDistance(currentPoint, nextPoint, size)
+        + doorwayCost
+        + wallCost
+        + turnCost;
+      if (nextCost >= (costs.get(nextKey) ?? Infinity)) return;
+
+      cameFrom.set(nextKey, currentKey);
+      costs.set(nextKey, nextCost);
+      estimates.set(nextKey, nextCost + pixelDistance(nextPoint, end, size));
+      open.add(nextKey);
+    });
+  }
+
+  return null;
+}
+
+function composeRoute(
+  points: PointPosition[],
+  walls: LineSegment[],
+  size: BoardSize,
+): RouteLayout {
+  if (points.length < 2) return { path: "", doorways: [] };
+
+  const composed: PointPosition[] = [points[0]];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const strictRoute = findGridRoute(points[index], points[index + 1], walls, size, false);
+    const rawRoute = strictRoute
+      ?? findGridRoute(points[index], points[index + 1], walls, size, true);
+    if (!rawRoute) return { path: "", doorways: [] };
+
+    const segment = strictRoute
+      ? simplifyStrictRoute(rawRoute, walls, size)
+      : simplifyDoorRoute(rawRoute, size);
+    composed.push(...segment.slice(1));
+  }
+
+  const doorways = composed.slice(0, -1).flatMap((point, index) => (
+    wallCrossings(point, composed[index + 1], walls, size)
+  )).filter((doorway, index, all) => all.findIndex((candidate) => (
+    pixelDistance(candidate, doorway, size) < 12
+  )) === index);
+  const path = composed.slice(1).reduce(
+    (value, point) => `${value} L ${point.x} ${point.y}`,
+    `M ${composed[0].x} ${composed[0].y}`,
+  );
+  return { path, doorways };
 }
 
 function availableBoardWidth(workspace: HTMLDivElement | null, fallback: number) {
@@ -393,7 +649,10 @@ export default function MapPlanner({
     ].filter((point): point is PointPosition => Boolean(point)),
     [places, positions],
   );
-  const routePath = useMemo(() => smoothRoutePath(routePoints), [routePoints]);
+  const routeLayout = useMemo(
+    () => composeRoute(routePoints, lines, size),
+    [lines, routePoints, size],
+  );
   const totalPoints = places.length + 1;
   const lineCountLabel = lines.length === 1
     ? "1 линия"
@@ -804,12 +1063,23 @@ export default function MapPlanner({
                 />
               </g>
             ))}
-            {adventureOpen && routePath ? (
+            {adventureOpen && routeLayout.path ? (
               <g className="map-route">
-                <path className="map-route-wear" d={routePath} />
+                {routeLayout.doorways.map((doorway, index) => (
+                  <g
+                    className="map-route-doorway"
+                    transform={`translate(${doorway.x} ${doorway.y}) rotate(${doorway.angle})`}
+                    key={`${doorway.x}-${doorway.y}-${index}`}
+                  >
+                    <circle className="map-route-door-gap" r="2.15" />
+                    <line className="map-route-door-jamb" x1="-2.2" y1="-1.25" x2="-2.2" y2="1.25" />
+                    <line className="map-route-door-jamb" x1="2.2" y1="-1.25" x2="2.2" y2="1.25" />
+                  </g>
+                ))}
+                <path className="map-route-wear" d={routeLayout.path} />
                 <path
                   className="map-route-ink"
-                  d={routePath}
+                  d={routeLayout.path}
                   markerEnd={`url(#route-arrow-${locationType})`}
                 />
               </g>

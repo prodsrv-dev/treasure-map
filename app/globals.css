@@ -712,6 +712,20 @@ h2 {
   stroke-dasharray: 8 7;
 }
 
+.map-lines .map-route-door-gap {
+  fill: #eee0c1;
+  stroke: rgba(238, 224, 193, 0.95);
+  stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-lines .map-route-door-jamb {
+  stroke: rgba(65, 49, 32, 0.84);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
 .map-lines .route-arrow {
   fill: var(--red);
   stroke: rgba(77, 43, 27, 0.85);
