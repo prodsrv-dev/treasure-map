@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Neucha&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -628,7 +629,8 @@ h2 {
   box-shadow: 0 22px 46px rgba(12, 29, 24, 0.4), inset 0 0 38px rgba(95, 67, 37, 0.13);
 }
 
-.map-board.mode-lines {
+.map-board.mode-lines,
+.map-board.mode-route {
   cursor: crosshair;
 }
 
@@ -661,30 +663,42 @@ h2 {
   pointer-events: none;
 }
 
-.map-lines .line-ink {
-  stroke: rgba(29, 42, 38, 0.84);
-  stroke-width: 3;
-  stroke-linecap: square;
-  vector-effect: non-scaling-stroke;
-}
-
-.map-lines .line-wear {
-  display: none;
-}
-
-.map-lines.styled .line-wear {
-  display: block;
-  stroke: rgba(117, 88, 53, 0.22);
-  stroke-width: 5.5;
+.map-walls-ink path {
+  fill: none;
+  stroke: rgba(56, 41, 24, 0.88);
+  stroke-width: 2.6;
   stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
 }
 
-.map-lines.styled .line-ink {
-  stroke: rgba(65, 49, 32, 0.88);
-  stroke-width: 2.7;
+.map-lines.styled .map-walls-ink path {
+  stroke: rgba(60, 44, 26, 0.94);
+  stroke-width: 2.4;
+}
+
+.map-walls-wash path {
+  fill: none;
+  stroke: rgba(150, 110, 66, 0.13);
+  stroke-width: 7.5;
   stroke-linecap: round;
-  stroke-dasharray: 28 0.8 11 1.2;
+}
+
+.map-doorway .door-jamb {
+  stroke: rgba(62, 45, 26, 0.9);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.map-doorway .door-leaf {
+  stroke: rgba(70, 52, 32, 0.8);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+
+.map-doorway .door-arc {
+  fill: none;
+  stroke: rgba(70, 52, 32, 0.42);
+  stroke-width: 1.1;
+  stroke-dasharray: 4 3;
 }
 
 .map-lines .draft-line {
@@ -693,43 +707,40 @@ h2 {
   stroke-dasharray: 7 5;
 }
 
-.map-lines .map-route-wear,
-.map-lines .map-route-ink {
+.map-lines .draft-route {
   fill: none;
+  stroke: rgba(178, 58, 36, 0.86);
+  stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.map-lines .map-route-wear {
-  stroke: rgba(244, 230, 198, 0.88);
-  stroke-width: 7;
 }
 
 .map-lines .map-route-ink {
-  stroke: rgba(45, 49, 42, 0.9);
-  stroke-width: 3.2;
-  stroke-dasharray: 8 7;
-}
-
-.map-lines .map-route-door-gap {
-  fill: #eee0c1;
-  stroke: rgba(238, 224, 193, 0.95);
-  stroke-width: 1.8;
-  vector-effect: non-scaling-stroke;
-}
-
-.map-lines .map-route-door-jamb {
-  stroke: rgba(65, 49, 32, 0.84);
-  stroke-width: 1.8;
+  fill: none;
+  stroke: rgba(58, 42, 24, 0.82);
+  stroke-width: 2.6;
   stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-dasharray: 10 8;
 }
 
 .map-lines .route-arrow {
-  fill: var(--red);
-  stroke: rgba(77, 43, 27, 0.85);
-  stroke-width: 0.7;
+  fill: rgba(178, 58, 36, 0.92);
+  stroke: rgba(84, 45, 24, 0.8);
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.map-lines .route-cross-under {
+  stroke: rgba(84, 44, 24, 0.5);
+  stroke-width: 8.5;
+  stroke-linecap: round;
+}
+
+.map-lines .route-cross-ink {
+  stroke: rgba(178, 58, 36, 0.92);
+  stroke-width: 5.6;
+  stroke-linecap: round;
 }
 
 .map-size {
@@ -740,6 +751,14 @@ h2 {
   color: rgba(23, 34, 31, 0.52);
   font-size: 11px;
   font-weight: 700;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.map-board.resizing .map-size,
+.map-board:has(.resize-edge:focus-visible) .map-size,
+.map-board:has(.resize-corner:focus-visible) .map-size {
+  opacity: 1;
 }
 
 .map-point {
@@ -749,33 +768,69 @@ h2 {
   z-index: 8;
   display: grid;
   place-items: center;
-  border: 3px solid #f8f2e5;
+  border: 0;
   border-radius: 50%;
-  background: var(--red);
-  color: white;
+  background: transparent;
+  color: #7e2c1c;
   cursor: grab;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 20px;
-  font-weight: 700;
+  font-family: "Neucha", Georgia, "Times New Roman", cursive;
+  font-size: 21px;
   line-height: 1;
-  box-shadow: 0 5px 13px rgba(73, 39, 27, 0.3);
+  padding: 0;
+  mix-blend-mode: multiply;
   transform: translate(-50%, -50%);
-  transition: box-shadow 120ms ease, transform 120ms ease;
+  transition: transform 120ms ease;
   touch-action: none;
+}
+
+.map-seal {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 3px rgba(62, 40, 22, 0.3));
+  pointer-events: none;
+}
+
+.map-seal .seal-paper {
+  fill: rgba(250, 243, 229, 0.88);
+}
+
+.map-seal .seal-ring {
+  fill: none;
+  stroke: rgba(62, 45, 26, 0.92);
+  stroke-width: 2.2;
+}
+
+.map-seal .seal-ring-inner {
+  fill: none;
+  stroke: rgba(169, 47, 33, 0.68);
+  stroke-width: 1.5;
+  stroke-dasharray: 2.6 2.2;
+}
+
+.map-point-number {
+  position: relative;
+  transform: rotate(-5deg);
 }
 
 .map-point.piled {
   left: var(--pile-offset);
   top: var(--pile-offset);
   z-index: var(--pile-z);
+  mix-blend-mode: normal;
   transform: translate(-50%, -50%) rotate(var(--pile-angle));
+}
+
+.map-point.piled .seal-paper,
+.map-point.piled .compass-paper {
+  fill: #f6efe0;
 }
 
 .map-point:hover,
 .map-point:focus-visible,
 .map-point.dragging {
   z-index: 30;
-  box-shadow: 0 9px 18px rgba(73, 39, 27, 0.42);
   outline: none;
   transform: translate(-50%, -50%) scale(1.08);
 }
@@ -784,23 +839,61 @@ h2 {
   cursor: grabbing;
 }
 
-.map-board.mode-lines .map-point {
+.map-board.mode-lines .map-point,
+.map-board.mode-route .map-point {
   pointer-events: none;
   opacity: 0.82;
 }
 
 .map-start-point {
-  background: var(--green);
-  font-size: 22px;
+  width: 62px;
+  height: 62px;
 }
 
-.map-start-point span {
-  transform: translateY(-1px);
+.map-compass {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 3px 4px rgba(62, 40, 22, 0.32));
+  pointer-events: none;
+}
+
+.map-compass .compass-paper {
+  fill: rgba(250, 243, 229, 0.9);
+}
+
+.map-compass .compass-rim {
+  fill: none;
+  stroke: rgba(62, 45, 26, 0.92);
+  stroke-width: 2;
+}
+
+.map-compass .compass-rim-inner {
+  fill: none;
+  stroke: rgba(62, 45, 26, 0.5);
+  stroke-width: 0.9;
+}
+
+.map-compass .compass-star-minor path {
+  fill: rgba(62, 45, 26, 0.55);
+}
+
+.map-compass .compass-ink {
+  fill: rgba(56, 41, 24, 0.92);
+}
+
+.map-compass .compass-red {
+  fill: rgba(178, 58, 36, 0.88);
+}
+
+.map-compass .compass-pin {
+  fill: rgba(38, 28, 16, 0.95);
 }
 
 .map-point.customized {
-  width: 96px;
-  height: 96px;
+  width: calc(84px * var(--marker-scale, 1));
+  height: calc(84px * var(--marker-scale, 1));
   overflow: visible;
   border: 0;
   border-radius: 0;
@@ -815,28 +908,30 @@ h2 {
 }
 
 .map-monster-image {
-  width: 88%;
-  height: 88%;
+  width: 94%;
+  height: 94%;
   object-fit: contain;
   pointer-events: none;
   user-select: none;
-  filter: drop-shadow(0 3px 2px rgba(67, 42, 24, 0.25));
+  opacity: 0.9;
+  filter: saturate(0.72) sepia(0.16) contrast(0.96);
 }
 
 .map-point-order {
-  width: 25px;
-  height: 25px;
+  width: 26px;
+  height: 26px;
   position: absolute;
-  right: 0;
-  bottom: 4px;
+  left: -2px;
+  bottom: 2px;
   display: grid;
   place-items: center;
-  border: 2px solid #f4e8cd;
+  border: 1.8px solid rgba(62, 45, 26, 0.9);
   border-radius: 50%;
-  background: var(--red);
-  color: white;
-  font: 700 13px/1 Georgia, "Times New Roman", serif;
-  box-shadow: 0 3px 7px rgba(70, 38, 24, 0.28);
+  background: rgba(250, 243, 229, 0.92);
+  color: #8f2f1e;
+  font: 16px/1 "Neucha", Georgia, "Times New Roman", cursive;
+  transform: rotate(-6deg);
+  box-shadow: 0 2px 4px rgba(70, 38, 24, 0.24);
 }
 
 .marker-tentacles {
@@ -1154,7 +1249,7 @@ h2 {
   position: absolute;
   right: 5px;
   bottom: 2px;
-  color: rgba(51, 95, 82, 0.76);
+  color: rgba(94, 68, 40, 0.66);
   font-size: 17px;
   line-height: 1;
 }

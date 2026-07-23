@@ -16,14 +16,14 @@ export type AdventureEntry = {
   riddle: string;
 };
 
-export const markerCatalog: Array<{ id: MarkerKind; image: string; label: string }> = [
-  { id: "tentacles", image: "/monsters/tentacle-dryer.png", label: "Щупальчатый сушитель" },
-  { id: "steam", image: "/monsters/steam-grumbler.png", label: "Паровой ворчун" },
-  { id: "fangs", image: "/monsters/fanged-guardian.png", label: "Зубастый хранитель" },
-  { id: "eye", image: "/monsters/deep-eye.png", label: "Глубинный глаз" },
-  { id: "shadow", image: "/monsters/wardrobe-shadow.png", label: "Шкафная тень" },
-  { id: "spark", image: "/monsters/spark-trickster.png", label: "Искристый шалун" },
-  { id: "faucet", image: "/monsters/brass-long-nose.png", label: "Латунный длиннонос" },
+export const markerCatalog: Array<{ id: MarkerKind; image: string; label: string; scale: number }> = [
+  { id: "tentacles", image: "/monsters/tentacle-dryer-map.png", label: "Щупальчатый сушитель", scale: 1.08 },
+  { id: "steam", image: "/monsters/steam-grumbler-map.png", label: "Паровой ворчун", scale: 1 },
+  { id: "fangs", image: "/monsters/fanged-guardian-map.png", label: "Зубастый хранитель", scale: 1.02 },
+  { id: "eye", image: "/monsters/deep-eye-map.png", label: "Глубинный глаз", scale: 1 },
+  { id: "shadow", image: "/monsters/wardrobe-shadow-map.png", label: "Шкафная тень", scale: 1.02 },
+  { id: "spark", image: "/monsters/spark-trickster-map.png", label: "Искристый шалун", scale: 1.08 },
+  { id: "faucet", image: "/monsters/brass-long-nose-map.png", label: "Латунный длиннонос", scale: 1.02 },
 ];
 
 const genericMonsters: Array<Pick<AdventureEntry, "marker" | "monster">> = [
