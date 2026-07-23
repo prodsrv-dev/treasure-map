@@ -1110,7 +1110,7 @@ export default function MapPlanner({
       places.forEach((place, index) => {
         const key = String(place.id);
         const suggested = createDefaultAdventure(place, index, locationType);
-        if (suggested.marker === "faucet" && restoredAdventures[key]?.marker === "shadow") {
+        if (!restoredAdventures[key]) {
           restoredAdventures[key] = suggested;
         }
       });

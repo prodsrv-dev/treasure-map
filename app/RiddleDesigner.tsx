@@ -8,7 +8,7 @@ type RiddlePlace = {
   second: string;
 };
 
-export type MarkerKind = "tentacles" | "steam" | "fangs" | "eye" | "shadow" | "spark" | "faucet";
+export type MarkerKind = "tentacles" | "steam" | "fangs" | "eye" | "faucet";
 
 export type AdventureEntry = {
   marker: MarkerKind;
@@ -17,21 +17,19 @@ export type AdventureEntry = {
 };
 
 export const markerCatalog: Array<{ id: MarkerKind; image: string; label: string; scale: number }> = [
-  { id: "tentacles", image: "/monsters/tentacle-dryer-map.png", label: "Щупальчатый сушитель", scale: 1.08 },
-  { id: "steam", image: "/monsters/steam-grumbler-map.png", label: "Паровой ворчун", scale: 1 },
-  { id: "fangs", image: "/monsters/fanged-guardian-map.png", label: "Зубастый хранитель", scale: 1.02 },
-  { id: "eye", image: "/monsters/deep-eye-map.png", label: "Глубинный глаз", scale: 1 },
-  { id: "shadow", image: "/monsters/wardrobe-shadow-map.png", label: "Шкафная тень", scale: 1.02 },
-  { id: "spark", image: "/monsters/spark-trickster-map.png", label: "Искристый шалун", scale: 1.08 },
-  { id: "faucet", image: "/monsters/brass-long-nose-map.png", label: "Латунный длиннонос", scale: 1.02 },
+  { id: "steam", image: "/monsters/steam-horror.png", label: "Паровой ревун", scale: 1.08 },
+  { id: "tentacles", image: "/monsters/tentacle-dryer-horror.png", label: "Щупальчатый ловец", scale: 1.18 },
+  { id: "faucet", image: "/monsters/brass-faucet-horror.png", label: "Латунный длиннонос", scale: 1.08 },
+  { id: "eye", image: "/monsters/deep-eye-horror.png", label: "Глубинный глаз", scale: 1.08 },
+  { id: "fangs", image: "/monsters/piano-predator-horror.png", label: "Клавишный пожиратель", scale: 1.14 },
 ];
 
 const genericMonsters: Array<Pick<AdventureEntry, "marker" | "monster">> = [
-  { marker: "eye", monster: "Одноглазый Наблюдатель" },
-  { marker: "fangs", monster: "Зубастый Хранитель" },
-  { marker: "shadow", monster: "Тихая Тень" },
-  { marker: "spark", monster: "Искристый Шалун" },
-  { marker: "tentacles", monster: "Щупальчатый Сторож" },
+  { marker: "steam", monster: "Паровой Ревун" },
+  { marker: "tentacles", monster: "Щупальчатый Ловец" },
+  { marker: "faucet", monster: "Латунный Длиннонос" },
+  { marker: "eye", monster: "Глубинный Глаз" },
+  { marker: "fangs", monster: "Клавишный Пожиратель" },
 ];
 
 function placeDetails(place: RiddlePlace, locationType: LocationType) {
@@ -68,32 +66,32 @@ export function createDefaultAdventure(
   if (normalized.includes("чайник")) {
     return {
       marker: "steam",
-      monster: "Паровой Ворчун",
-      riddle: `${placePhrase} притаился Паровой Ворчун. В его круглом брюхе бурлит вода, из длинного носа вырывается пар, а перед этим он громко урчит. Найди чудовище и забери подсказку рядом с ним.`,
+      monster: "Паровой Ревун",
+      riddle: `${placePhrase} притаился Паровой Ревун. Под треснувшей крышкой у него прячется пасть, в железном брюхе бурлит вода, а из длинного носа вырывается обжигающий пар. Найди чудовище до того, как оно снова заревёт.`,
     };
   }
 
   if (normalized.includes("сушил")) {
     return {
       marker: "tentacles",
-      monster: "Щупальчатый Сушитель",
-      riddle: `${placePhrase} поселилось чудище с множеством длинных щупалец. Оно растопыривает их во все стороны и держит пойманные вещи, пока те не станут сухими. Найди его логово.`,
+      monster: "Щупальчатый Ловец",
+      riddle: `${placePhrase} раскинулось костлявое чудище из металлических лап. Оно цепляет добычу длинными крюками и держит её, пока та не высохнет. Найди логово Щупальчатого Ловца.`,
     };
   }
 
   if (normalized.includes("холодиль") || normalized.includes("мороз")) {
     return {
-      marker: "fangs",
-      monster: "Ледяной Проглот",
-      riddle: `${placePhrase} дремлет Ледяной Проглот. За толстой дверью у него морозное брюхо, в котором исчезает еда. Отыщи холодного великана и загляни рядом с ним.`,
+      marker: "eye",
+      monster: "Ледяной Наблюдатель",
+      riddle: `${placePhrase} не мигает Ледяной Наблюдатель. За толстой дверью у него морозное брюхо, в котором бесследно исчезает еда. Отыщи холодного стража и загляни рядом с ним.`,
     };
   }
 
   if (normalized.includes("шкаф") || normalized.includes("комод")) {
     return {
-      marker: "shadow",
-      monster: "Шкафная Тень",
-      riddle: `${placePhrase} стоит молчаливая Шкафная Тень. Она распахивает огромную пасть, проглатывает одежду и хранит её в темноте. Найди место, где она прячет свой плен.`,
+      marker: "tentacles",
+      monster: "Шкафной Ловец",
+      riddle: `${placePhrase} притаился Шкафной Ловец. Он распахивает тёмную пасть, хватает одежду длинными лапами и прячет добычу внутри. Найди место, где он хранит свой плен.`,
     };
   }
 
@@ -116,8 +114,8 @@ export function createDefaultAdventure(
   if (normalized.includes("пиани") || normalized.includes("роял")) {
     return {
       marker: "fangs",
-      monster: "Клавишный Зубастик",
-      riddle: `${placePhrase} ухмыляется Клавишный Зубастик. У него целый ряд белых и чёрных зубов: прикоснись к ним, и чудище заговорит музыкой. Разыщи его и проверь тайник.`,
+      monster: "Клавишный Пожиратель",
+      riddle: `${placePhrase} скалит белые и чёрные зубы Клавишный Пожиратель. Стоит прикоснуться к его пасти, как старое дерево начинает стонать разными голосами. Разыщи чудовище и проверь тайник.`,
     };
   }
 
