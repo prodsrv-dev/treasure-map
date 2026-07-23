@@ -16,13 +16,13 @@ export type AdventureEntry = {
   riddle: string;
 };
 
-export const markerCatalog: Array<{ id: MarkerKind; symbol: string; label: string }> = [
-  { id: "tentacles", symbol: "✣", label: "Щупальца" },
-  { id: "steam", symbol: "♨", label: "Пар" },
-  { id: "fangs", symbol: "◆", label: "Клыки" },
-  { id: "eye", symbol: "◉", label: "Глаз" },
-  { id: "shadow", symbol: "☾", label: "Тень" },
-  { id: "spark", symbol: "✦", label: "Искра" },
+export const markerCatalog: Array<{ id: MarkerKind; image: string; label: string }> = [
+  { id: "tentacles", image: "/monsters/tentacle-dryer.png", label: "Щупальчатый сушитель" },
+  { id: "steam", image: "/monsters/steam-grumbler.png", label: "Паровой ворчун" },
+  { id: "fangs", image: "/monsters/fanged-guardian.png", label: "Зубастый хранитель" },
+  { id: "eye", image: "/monsters/deep-eye.png", label: "Глубинный глаз" },
+  { id: "shadow", image: "/monsters/wardrobe-shadow.png", label: "Шкафная тень" },
+  { id: "spark", image: "/monsters/spark-trickster.png", label: "Искристый шалун" },
 ];
 
 const genericMonsters: Array<Pick<AdventureEntry, "marker" | "monster">> = [
@@ -171,6 +171,8 @@ export default function RiddleDesigner({
           const entry = adventures[String(place.id)]
             ?? createDefaultAdventure(place, index, locationType);
           const details = placeDetails(place, locationType);
+          const selectedMarker = markerCatalog.find((marker) => marker.id === entry.marker)
+            ?? markerCatalog[0];
 
           return (
             <article className="riddle-item" key={place.id}>
@@ -180,20 +182,25 @@ export default function RiddleDesigner({
                 <small>{details.location}</small>
               </div>
 
-              <div className="marker-picker" role="group" aria-label={`Маркер для ${details.object}`}>
-                {markerCatalog.map((marker) => (
-                  <button
-                    className={`marker-choice marker-${marker.id}${entry.marker === marker.id ? " active" : ""}`}
-                    type="button"
-                    aria-label={marker.label}
-                    aria-pressed={entry.marker === marker.id}
-                    title={marker.label}
-                    onClick={() => updateEntry(place.id, { marker: marker.id })}
-                    key={marker.id}
-                  >
-                    {marker.symbol}
-                  </button>
-                ))}
+              <div className="monster-art">
+                <div className="monster-portrait">
+                  <img src={selectedMarker.image} alt={`${entry.monster}. ${selectedMarker.label}`} />
+                </div>
+                <div className="marker-picker" role="group" aria-label={`Образ чудовища для ${details.object}`}>
+                  {markerCatalog.map((marker) => (
+                    <button
+                      className={`marker-choice${entry.marker === marker.id ? " active" : ""}`}
+                      type="button"
+                      aria-label={marker.label}
+                      aria-pressed={entry.marker === marker.id}
+                      title={marker.label}
+                      onClick={() => updateEntry(place.id, { marker: marker.id })}
+                      key={marker.id}
+                    >
+                      <img src={marker.image} alt="" />
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <label className="monster-name">

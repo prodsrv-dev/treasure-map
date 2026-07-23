@@ -760,32 +760,44 @@ h2 {
 }
 
 .map-point.customized {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 22px;
+  width: 72px;
+  height: 72px;
+  border: 1px solid rgba(92, 65, 43, 0.46);
+  background: rgba(246, 232, 199, 0.9);
+  box-shadow: 0 6px 14px rgba(73, 39, 27, 0.28);
+}
+
+.map-monster-image {
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 3px 2px rgba(67, 42, 24, 0.25));
 }
 
 .marker-tentacles {
-  background: #7b425c;
+  border-color: #7b425c;
 }
 
 .marker-steam {
-  background: var(--blue);
+  border-color: var(--blue);
 }
 
 .marker-fangs {
-  background: var(--red-dark);
+  border-color: var(--red-dark);
 }
 
 .marker-eye {
-  background: #9a7134;
+  border-color: #9a7134;
 }
 
 .marker-shadow {
-  background: #343b39;
+  border-color: #343b39;
 }
 
 .marker-spark {
-  background: #b86635;
+  border-color: #b86635;
 }
 
 .map-workspace-footer {
@@ -873,7 +885,7 @@ h2 {
 
 .riddle-item {
   display: grid;
-  grid-template-columns: minmax(140px, 0.52fr) minmax(220px, 0.74fr) minmax(210px, 0.8fr) minmax(320px, 1.55fr);
+  grid-template-columns: minmax(140px, 0.45fr) minmax(300px, 0.9fr) minmax(190px, 0.68fr) minmax(320px, 1.4fr);
   gap: 22px;
   align-items: start;
   border: 1px solid rgba(23, 34, 31, 0.17);
@@ -910,33 +922,75 @@ h2 {
   font-size: 12px;
 }
 
+.monster-art {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.monster-portrait {
+  width: 116px;
+  height: 116px;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.monster-portrait::after {
+  content: "";
+  width: 82%;
+  height: 1px;
+  position: absolute;
+  left: 9%;
+  bottom: 7px;
+  background: rgba(85, 57, 35, 0.23);
+  box-shadow: 0 4px 8px rgba(85, 57, 35, 0.16);
+}
+
+.monster-portrait img {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  z-index: 1;
+  object-fit: contain;
+  filter: drop-shadow(0 5px 4px rgba(54, 35, 21, 0.2));
+}
+
 .marker-picker {
   display: grid;
-  grid-template-columns: repeat(6, 34px);
-  gap: 5px;
+  grid-template-columns: repeat(3, 48px);
+  gap: 7px;
 }
 
 .marker-choice {
-  width: 34px;
-  height: 34px;
+  width: 48px;
+  height: 48px;
   display: grid;
   place-items: center;
-  border: 2px solid transparent;
-  border-radius: 50%;
-  color: white;
+  overflow: hidden;
+  border: 1px solid rgba(72, 50, 34, 0.25);
+  border-radius: 4px;
+  background: #f1e5ca;
   cursor: pointer;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 17px;
-  line-height: 1;
-  opacity: 0.48;
+  opacity: 0.58;
+  padding: 2px;
   transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.marker-choice img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .marker-choice:hover,
 .marker-choice:focus-visible,
 .marker-choice.active {
-  border-color: white;
-  box-shadow: 0 0 0 2px var(--ink);
+  border-color: var(--paper-light);
+  box-shadow: 0 0 0 2px var(--red-dark);
   opacity: 1;
   outline: none;
   transform: translateY(-1px);
@@ -1063,6 +1117,10 @@ h2 {
     width: 54vw;
     right: 2vw;
     top: 220px;
+  }
+
+  .riddle-item {
+    grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1fr);
   }
 
 }
@@ -1252,12 +1310,21 @@ h2 {
   }
 
   .marker-picker {
-    grid-template-columns: repeat(6, 38px);
+    grid-template-columns: repeat(3, 42px);
   }
 
   .marker-choice {
-    width: 38px;
-    height: 38px;
+    width: 42px;
+    height: 42px;
+  }
+
+  .monster-art {
+    grid-template-columns: 104px minmax(0, 1fr);
+  }
+
+  .monster-portrait {
+    width: 104px;
+    height: 104px;
   }
 
   .map-board {

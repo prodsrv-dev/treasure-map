@@ -817,7 +817,9 @@ export default function MapPlanner({
                 onKeyDown={(event) => movePointWithKeyboard(event, place.id)}
                 key={place.id}
               >
-                {marker?.symbol ?? index + 1}
+                {marker
+                  ? <img className="map-monster-image" src={marker.image} alt="" draggable={false} />
+                  : index + 1}
               </button>
             );
           })}
