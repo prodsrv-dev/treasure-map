@@ -58,10 +58,6 @@ type LineSegment = {
 
 type DraftLine = Omit<LineSegment, "id">;
 
-type RouteDoorway = PointPosition & {
-  angle: number;
-};
-
 type RouteArrow = {
   x: number;
   y: number;
@@ -70,14 +66,8 @@ type RouteArrow = {
 
 type RouteLayout = {
   path: string;
-  doorways: RouteDoorway[];
   arrows: RouteArrow[];
   cross: { x: number; y: number } | null;
-};
-
-type WallPiece = {
-  id: number;
-  d: string;
 };
 
 const DEFAULT_SIZE: BoardSize = { width: 920, height: 540 };
@@ -134,7 +124,7 @@ function segmentIntersection(
   end: PointPosition,
   wall: LineSegment,
   size: BoardSize,
-): RouteDoorway | null {
+): PointPosition | null {
   const a = toPixels(start, size);
   const b = toPixels(end, size);
   const c = toPixels({ x: wall.x1, y: wall.y1 }, size);
@@ -151,7 +141,6 @@ function segmentIntersection(
   return {
     x: start.x + (end.x - start.x) * routeProgress,
     y: start.y + (end.y - start.y) * routeProgress,
-    angle: Math.atan2(d.y - c.y, d.x - c.x) * (180 / Math.PI),
   };
 }
 
@@ -229,7 +218,6 @@ function findGridRoute(
   end: PointPosition,
   walls: LineSegment[],
   size: BoardSize,
-  allowDoorways: boolean,
 ) {
   const step = 2.5;
   const cellCount = Math.round(100 / step);
@@ -296,14 +284,8 @@ function findGridRoute(
       const crossings = wallCrossings(currentPoint, nextPoint, walls, size);
       const nearWall = runsTooCloseToWall(currentPoint, nextPoint, walls, size);
       const isEndpoint = nextKey === endKey;
-      if (!allowDoorways && (crossings.length > 0 || (nearWall && !isEndpoint))) return;
+      if (crossings.length > 0 || (nearWall && !isEndpoint)) return;
 
-      const nearestWall = walls.reduce(
-        (nearest, wall) => Math.min(nearest, distanceToWall(nextPoint, wall, size)),
-        Infinity,
-      );
-      const doorwayCost = allowDoorways ? crossings.length * 500 : 0;
-      const wallCost = allowDoorways && nearestWall < 12 ? (12 - nearestWall) * 4 : 0;
       const previousKey = cameFrom.get(currentKey);
       let turnCost = 0;
       if (previousKey) {
@@ -316,8 +298,6 @@ function findGridRoute(
       }
       const nextCost = (costs.get(currentKey) ?? Infinity)
         + pixelDistance(currentPoint, nextPoint, size)
-        + doorwayCost
-        + wallCost
         + turnCost;
       if (nextCost >= (costs.get(nextKey) ?? Infinity)) return;
 
@@ -432,14 +412,16 @@ function composeDrawnRoute(
   walls: LineSegment[],
   size: BoardSize,
 ): RouteLayout {
-  if (points.length < 2) return { path: "", doorways: [], arrows: [], cross: null };
+  if (points.length < 2) return { path: "", arrows: [], cross: null };
 
-  const doorways = points.slice(0, -1).flatMap((point, index) => (
-    wallCrossings(point, points[index + 1], walls, size)
-  )).filter((doorway, index, all) => all.findIndex((candidate) => (
-    pixelDistance(candidate, doorway, size) < 12
-  )) === index);
-  const pixels = points.map((point) => toPixels(point, size));
+  const routed: PointPosition[] = [points[0]];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const segment = findGridRoute(points[index], points[index + 1], walls, size);
+    if (!segment) return { path: "", arrows: [], cross: null };
+    routed.push(...simplifyStrictRoute(segment, walls, size).slice(1));
+  }
+
+  const pixels = routed.map((point) => toPixels(point, size));
   const totalLength = pixels.slice(1).reduce((sum, point, index) => (
     sum + Math.hypot(point.x - pixels[index].x, point.y - pixels[index].y)
   ), 0);
@@ -452,79 +434,8 @@ function composeDrawnRoute(
 
   return {
     path: catmullRomPath(pixels),
-    doorways,
     arrows,
     cross: null,
-  };
-}
-
-function scenicRouteLeg(
-  from: PointPosition,
-  to: PointPosition,
-  size: BoardSize,
-  preferredSide: number,
-) {
-  const start = toPixels(from, size);
-  const end = toPixels(to, size);
-  const delta = { x: end.x - start.x, y: end.y - start.y };
-  const length = Math.hypot(delta.x, delta.y);
-  if (length < 32) return { points: [from, to], side: -preferredSide };
-
-  const direction = { x: delta.x / length, y: delta.y / length };
-  const perpendicular = { x: -direction.y, y: direction.x };
-  const baseAmplitude = clamp(length * 0.3, 32, 92);
-  const sampleCount = clamp(Math.round(length / 52), 6, 13);
-  const margin = 22;
-
-  const makePixels = (side: number, amplitude: number) => (
-    Array.from({ length: sampleCount + 1 }, (_, index) => {
-      const progress = index / sampleCount;
-      const bow = Math.sin(Math.PI * progress);
-      const handDrawnDrift = Math.sin(Math.PI * 2 * progress) * amplitude * 0.08;
-      return {
-        x: start.x + delta.x * progress
-          + perpendicular.x * side * amplitude * bow
-          + direction.x * handDrawnDrift,
-        y: start.y + delta.y * progress
-          + perpendicular.y * side * amplitude * bow
-          + direction.y * handDrawnDrift,
-      };
-    })
-  );
-
-  const candidates = [preferredSide, -preferredSide].flatMap((side) => (
-    [1, 0.78, 0.58, 0.4].map((factor) => {
-      const pixels = makePixels(side, baseAmplitude * factor);
-      const edgeRoom = Math.min(...pixels.flatMap((point) => [
-        point.x - margin,
-        size.width - margin - point.x,
-        point.y - margin,
-        size.height - margin - point.y,
-      ]));
-      return {
-        side,
-        factor,
-        pixels,
-        score: Math.min(edgeRoom, 54) + factor * 82 - (side === preferredSide ? 0 : 9),
-      };
-    })
-  ));
-  const chosen = candidates
-    .filter((candidate) => candidate.pixels.every((point) => (
-      point.x >= margin
-      && point.x <= size.width - margin
-      && point.y >= margin
-      && point.y <= size.height - margin
-    )))
-    .sort((first, second) => second.score - first.score)[0]
-    ?? candidates.sort((first, second) => second.score - first.score)[0];
-
-  return {
-    points: chosen.pixels.map((point) => ({
-      x: clamp((point.x / size.width) * 100, 0, 100),
-      y: clamp((point.y / size.height) * 100, 0, 100),
-    })),
-    side: -chosen.side,
   };
 }
 
@@ -683,23 +594,21 @@ function composeRoute(
   walls: LineSegment[],
   size: BoardSize,
 ): RouteLayout {
-  if (points.length < 2) return { path: "", doorways: [], arrows: [], cross: null };
+  if (points.length < 2) return { path: "", arrows: [], cross: null };
 
   const composed: PointPosition[] = [points[0]];
   const legEnds: number[] = [];
-  let scenicSide = 1;
+  let swellSide = 1;
   for (let index = 0; index < points.length - 1; index += 1) {
-    const scenic = scenicRouteLeg(points[index], points[index + 1], size, scenicSide);
-    scenicSide = scenic.side;
-    composed.push(...scenic.points.slice(1));
+    const strictRoute = findGridRoute(points[index], points[index + 1], walls, size);
+    if (!strictRoute) return { path: "", arrows: [], cross: null };
+
+    const segment = simplifyStrictRoute(strictRoute, walls, size);
+    const swollen = swellLeg(segment, walls, size, swellSide);
+    swellSide = swollen.side;
+    composed.push(...swollen.points.slice(1));
     legEnds.push(composed.length - 1);
   }
-
-  const doorways = composed.slice(0, -1).flatMap((point, index) => (
-    wallCrossings(point, composed[index + 1], walls, size)
-  )).filter((doorway, index, all) => all.findIndex((candidate) => (
-    pixelDistance(candidate, doorway, size) < 12
-  )) === index);
 
   const arrows = legEnds.flatMap((endIndex, leg) => {
     const startIndex = leg === 0 ? 0 : legEnds[leg - 1];
@@ -720,51 +629,9 @@ function composeRoute(
   const path = catmullRomPath(composed.map((point) => toPixels(point, size)));
   return {
     path,
-    doorways,
     arrows,
     cross: tail ? toPixels(tail, size) : null,
   };
-}
-
-function splitWalls(walls: LineSegment[], doorways: RouteDoorway[], size: BoardSize): WallPiece[] {
-  return walls.map((wall) => {
-    const start = toPixels({ x: wall.x1, y: wall.y1 }, size);
-    const end = toPixels({ x: wall.x2, y: wall.y2 }, size);
-    const length = Math.hypot(end.x - start.x, end.y - start.y);
-    const coordinate = (value: number) => Number(value.toFixed(1));
-    const pointAt = (progress: number) => ({
-      x: coordinate(start.x + (end.x - start.x) * progress),
-      y: coordinate(start.y + (end.y - start.y) * progress),
-    });
-
-    if (length === 0) return { id: wall.id, d: "" };
-
-    const cuts = doorways
-      .filter((doorway) => distanceToWall(doorway, wall, size) < 2)
-      .map((doorway) => {
-        const pixels = toPixels(doorway, size);
-        return ((pixels.x - start.x) * (end.x - start.x)
-          + (pixels.y - start.y) * (end.y - start.y)) / (length * length);
-      })
-      .sort((first, second) => first - second);
-    const halfGap = 15 / length;
-
-    const spans: Array<[number, number]> = [];
-    let cursor = 0;
-    cuts.forEach((cut) => {
-      const from = Math.max(0, cut - halfGap);
-      if (from - cursor > 3 / length) spans.push([cursor, from]);
-      cursor = Math.max(cursor, cut + halfGap);
-    });
-    if (1 - cursor > 3 / length) spans.push([cursor, 1]);
-
-    const d = spans.map(([from, to]) => {
-      const a = pointAt(from);
-      const b = pointAt(to);
-      return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
-    }).join(" ");
-    return { id: wall.id, d };
-  });
 }
 
 function availableBoardWidth(workspace: HTMLDivElement | null, fallback: number) {
@@ -1086,8 +953,15 @@ export default function MapPlanner({
       : composeDrawnRoute(manualRoute, lines, size)
   ), [lines, manualRoute, routePoints, size]);
   const wallPieces = useMemo(
-    () => splitWalls(lines, adventureOpen || mode === "route" ? routeLayout.doorways : [], size),
-    [adventureOpen, lines, mode, routeLayout.doorways, size],
+    () => lines.map((line) => {
+      const start = toPixels({ x: line.x1, y: line.y1 }, size);
+      const end = toPixels({ x: line.x2, y: line.y2 }, size);
+      return {
+        id: line.id,
+        d: `M ${start.x.toFixed(1)} ${start.y.toFixed(1)} L ${end.x.toFixed(1)} ${end.y.toFixed(1)}`,
+      };
+    }),
+    [lines, size],
   );
   const totalPoints = places.length + 1;
   const lineCountLabel = lines.length === 1
@@ -1532,21 +1406,6 @@ export default function MapPlanner({
                   piece.d ? <path d={piece.d} key={piece.id} /> : null
                 ))}
               </g>
-              {adventureOpen || mode === "route" ? routeLayout.doorways.map((doorway, index) => {
-                const pixels = toPixels(doorway, size);
-                return (
-                  <g
-                    className="map-doorway"
-                    transform={`translate(${pixels.x} ${pixels.y}) rotate(${doorway.angle})`}
-                    key={`${doorway.x}-${doorway.y}-${index}`}
-                  >
-                    <line className="door-jamb" x1="-15" y1="-4.5" x2="-15" y2="4.5" />
-                    <line className="door-jamb" x1="15" y1="-4.5" x2="15" y2="4.5" />
-                    <line className="door-leaf" x1="-15" y1="0" x2="-15" y2="-30" />
-                    <path className="door-arc" d="M 15 0 A 30 30 0 0 0 -15 -30" />
-                  </g>
-                );
-              }) : null}
             </g>
             {(adventureOpen || mode === "route") && routeLayout.path && !draftRoute ? (
               <g className="map-route">
@@ -1655,10 +1514,7 @@ export default function MapPlanner({
               >
                 {marker
                   ? (
-                    <>
-                      <img className="map-monster-image" src={marker.image} alt="" draggable={false} />
-                      <span className="map-point-order" aria-hidden="true">{index + 1}</span>
-                    </>
+                    <img className="map-monster-image" src={marker.image} alt="" draggable={false} />
                   )
                   : (
                     <>

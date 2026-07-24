@@ -682,25 +682,6 @@ h2 {
   stroke-linecap: round;
 }
 
-.map-doorway .door-jamb {
-  stroke: rgba(62, 45, 26, 0.9);
-  stroke-width: 2.4;
-  stroke-linecap: round;
-}
-
-.map-doorway .door-leaf {
-  stroke: rgba(70, 52, 32, 0.8);
-  stroke-width: 1.7;
-  stroke-linecap: round;
-}
-
-.map-doorway .door-arc {
-  fill: none;
-  stroke: rgba(70, 52, 32, 0.42);
-  stroke-width: 1.1;
-  stroke-dasharray: 4 3;
-}
-
 .map-lines .draft-line {
   stroke: var(--red);
   stroke-width: 2.5;
@@ -915,23 +896,6 @@ h2 {
   user-select: none;
   opacity: 0.9;
   filter: saturate(0.72) sepia(0.16) contrast(0.96);
-}
-
-.map-point-order {
-  width: 26px;
-  height: 26px;
-  position: absolute;
-  left: -2px;
-  bottom: 2px;
-  display: grid;
-  place-items: center;
-  border: 1.8px solid rgba(62, 45, 26, 0.9);
-  border-radius: 50%;
-  background: rgba(250, 243, 229, 0.92);
-  color: #8f2f1e;
-  font: 16px/1 "Neucha", Georgia, "Times New Roman", cursive;
-  transform: rotate(-6deg);
-  box-shadow: 0 2px 4px rgba(70, 38, 24, 0.24);
 }
 
 .marker-tentacles {
