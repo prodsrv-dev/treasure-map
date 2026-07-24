@@ -47,7 +47,7 @@ type StoredMap = {
 };
 
 type ResizeAxis = "x" | "y" | "xy";
-type PointId = number | "start";
+type PointId = number | "start" | "treasure";
 type DrawingMode = "points" | "lines" | "route";
 type RouteStyle = "plain" | "arrows" | "footprints";
 
@@ -662,6 +662,7 @@ function composeRoute(
   points: PointPosition[],
   walls: LineSegment[],
   size: BoardSize,
+  includeFinalCross = true,
 ): RouteLayout {
   if (points.length < 2) return {
     path: "", arrows: [], footprints: [], cross: null,
@@ -697,7 +698,9 @@ function composeRoute(
     return arrow ? [arrow] : [];
   });
 
-  const tail = finaleTail(composed, walls, size, points.slice(0, -1));
+  const tail = includeFinalCross
+    ? finaleTail(composed, walls, size, points.slice(0, -1))
+    : null;
   if (tail) composed.push(tail);
   const pixels = composed.map((point) => toPixels(point, size));
   const path = catmullRomPath(pixels);
@@ -1037,7 +1040,8 @@ export default function MapPlanner({
 
   const placedCount = useMemo(
     () => places.filter((place) => positions[String(place.id)]).length
-      + (positions.start ? 1 : 0),
+      + (positions.start ? 1 : 0)
+      + (positions.treasure ? 1 : 0),
     [places, positions],
   );
   const routePoints = useMemo(() => {
@@ -1047,13 +1051,14 @@ export default function MapPlanner({
     return [
       anchored(positions.start, 24),
       ...places.map((place) => anchored(positions[String(place.id)], 34)),
+      anchored(positions.treasure, 28),
     ].filter((point): point is PointPosition => Boolean(point));
   }, [places, positions, size]);
   const routeLayouts = useMemo(() => (
     manualRoutes === null
-      ? [composeRoute(routePoints, lines, size)]
+      ? [composeRoute(routePoints, lines, size, !positions.treasure)]
       : manualRoutes.map((route) => composeDrawnRoute(route, lines, size))
-  ), [lines, manualRoutes, routePoints, size]);
+  ), [lines, manualRoutes, positions.treasure, routePoints, size]);
   const wallPieces = useMemo(
     () => lines.map((line) => {
       const start = toPixels({ x: line.x1, y: line.y1 }, size);
@@ -1065,7 +1070,7 @@ export default function MapPlanner({
     }),
     [lines, size],
   );
-  const totalPoints = places.length + 1;
+  const totalPoints = places.length + 2;
   const lineCountLabel = lines.length === 1
     ? "1 линия"
     : lines.length > 1 && lines.length < 5
@@ -1691,6 +1696,30 @@ export default function MapPlanner({
               </button>
             );
           })}
+
+          <button
+            className={`map-point map-treasure-point${positions.treasure ? " placed" : " piled"}${draggingId === "treasure" ? " dragging" : ""}`}
+            type="button"
+            style={positions.treasure
+              ? { left: `${positions.treasure.x}%`, top: `${positions.treasure.y}%` }
+              : {
+                "--pile-offset": `${56 + places.length * 7}px`,
+                "--pile-angle": "7deg",
+                "--pile-z": 16 - places.length,
+              } as CSSProperties}
+            aria-label="Клад"
+            title="Клад"
+            tabIndex={mode === "points" ? 0 : -1}
+            onPointerDown={(event) => startPointDrag(event, "treasure")}
+            onKeyDown={(event) => movePointWithKeyboard(event, "treasure")}
+          >
+            <img
+              className="map-treasure-image"
+              src="/treasure-chest-map.png"
+              alt=""
+              draggable={false}
+            />
+          </button>
 
           <button
             className="resize-edge resize-edge-right"

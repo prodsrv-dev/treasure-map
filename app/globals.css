@@ -950,6 +950,33 @@ h2 {
   filter: saturate(0.72) sepia(0.16) contrast(0.96);
 }
 
+.map-point.map-treasure-point {
+  width: 92px;
+  height: 78px;
+  z-index: 12;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  mix-blend-mode: normal;
+}
+
+.map-treasure-point:hover,
+.map-treasure-point:focus-visible,
+.map-treasure-point.dragging {
+  box-shadow: none;
+}
+
+.map-treasure-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  filter: saturate(0.76) sepia(0.12) contrast(0.98);
+}
+
 .marker-tentacles {
   border-color: #7b425c;
 }
