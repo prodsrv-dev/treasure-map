@@ -555,6 +555,43 @@ h2 {
   line-height: 1;
 }
 
+.route-style-switch {
+  min-height: 46px;
+  display: inline-flex;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+}
+
+.route-style-switch button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 13px;
+}
+
+.route-style-switch button:last-child {
+  border-right: 0;
+}
+
+.route-style-switch button:hover,
+.route-style-switch button:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.route-style-switch button.active {
+  background: #f7f3ea;
+  color: var(--green);
+}
+
 .line-count {
   margin-left: auto;
   color: rgba(255, 255, 255, 0.7);
@@ -710,6 +747,19 @@ h2 {
   stroke: rgba(84, 45, 24, 0.8);
   stroke-width: 1;
   stroke-linejoin: round;
+}
+
+.map-lines .route-footprint {
+  fill: rgba(61, 48, 34, 0.76);
+}
+
+.map-lines .footprint-sole {
+  transform: rotate(-7deg);
+  transform-origin: center;
+}
+
+.map-lines .footprint-toe {
+  opacity: 0.9;
 }
 
 .map-lines .route-cross-under {
@@ -1385,6 +1435,16 @@ h2 {
   .map-mode-switch button {
     min-height: 44px;
     padding: 0 12px;
+  }
+
+  .route-style-switch {
+    width: 100%;
+    order: 2;
+  }
+
+  .route-style-switch button {
+    flex: 1;
+    padding: 0 8px;
   }
 
   .beautify-lines {

@@ -38,7 +38,9 @@ type StoredMap = {
   size: BoardSize;
   positions: Record<string, PointPosition>;
   lines: LineSegment[];
-  manualRoute: PointPosition[] | null;
+  manualRoutes: PointPosition[][] | null;
+  manualRoute?: PointPosition[] | null;
+  routeStyle: RouteStyle;
   styled: boolean;
   adventureOpen: boolean;
   adventures: Record<string, AdventureEntry>;
@@ -47,6 +49,7 @@ type StoredMap = {
 type ResizeAxis = "x" | "y" | "xy";
 type PointId = number | "start";
 type DrawingMode = "points" | "lines" | "route";
+type RouteStyle = "plain" | "arrows" | "footprints";
 
 type LineSegment = {
   id: number;
@@ -64,9 +67,14 @@ type RouteArrow = {
   angle: number;
 };
 
+type RouteFootprint = RouteArrow & {
+  side: number;
+};
+
 type RouteLayout = {
   path: string;
   arrows: RouteArrow[];
+  footprints: RouteFootprint[];
   cross: { x: number; y: number } | null;
 };
 
@@ -77,6 +85,11 @@ const boundaryLabel: Record<LocationType, string> = {
   dacha: "дачного участка",
   yard: "двора",
 };
+const routeStyleOptions: Array<{ id: RouteStyle; label: string }> = [
+  { id: "plain", label: "Без стрелок" },
+  { id: "arrows", label: "Стрелки" },
+  { id: "footprints", label: "Следы" },
+];
 
 function storageKey(locationType: LocationType) {
   return `treasure-map:layout:${locationType}:v1`;
@@ -407,17 +420,45 @@ function routePointAtDistance(points: Array<{ x: number; y: number }>, targetDis
   return null;
 }
 
+function routeFootprints(points: Array<{ x: number; y: number }>): RouteFootprint[] {
+  const totalLength = points.slice(1).reduce((sum, point, index) => (
+    sum + Math.hypot(point.x - points[index].x, point.y - points[index].y)
+  ), 0);
+  const marks: RouteFootprint[] = [];
+
+  for (let distance = 20, index = 0; distance < totalLength - 12; distance += 27, index += 1) {
+    const point = routePointAtDistance(points, distance);
+    if (!point) continue;
+
+    const side = index % 2 === 0 ? -1 : 1;
+    const angle = (point.angle * Math.PI) / 180;
+    const offset = 3.8 * side;
+    marks.push({
+      x: point.x - Math.sin(angle) * offset,
+      y: point.y + Math.cos(angle) * offset,
+      angle: point.angle,
+      side,
+    });
+  }
+
+  return marks;
+}
+
 function composeDrawnRoute(
   points: PointPosition[],
   walls: LineSegment[],
   size: BoardSize,
 ): RouteLayout {
-  if (points.length < 2) return { path: "", arrows: [], cross: null };
+  if (points.length < 2) return {
+    path: "", arrows: [], footprints: [], cross: null,
+  };
 
   const routed: PointPosition[] = [points[0]];
   for (let index = 0; index < points.length - 1; index += 1) {
     const segment = findGridRoute(points[index], points[index + 1], walls, size);
-    if (!segment) return { path: "", arrows: [], cross: null };
+    if (!segment) return {
+      path: "", arrows: [], footprints: [], cross: null,
+    };
     routed.push(...simplifyStrictRoute(segment, walls, size).slice(1));
   }
 
@@ -435,6 +476,7 @@ function composeDrawnRoute(
   return {
     path: catmullRomPath(pixels),
     arrows,
+    footprints: routeFootprints(pixels),
     cross: null,
   };
 }
@@ -621,14 +663,18 @@ function composeRoute(
   walls: LineSegment[],
   size: BoardSize,
 ): RouteLayout {
-  if (points.length < 2) return { path: "", arrows: [], cross: null };
+  if (points.length < 2) return {
+    path: "", arrows: [], footprints: [], cross: null,
+  };
 
   const composed: PointPosition[] = [points[0]];
   const legEnds: number[] = [];
   let swellSide = 1;
   for (let index = 0; index < points.length - 1; index += 1) {
     const strictRoute = findGridRoute(points[index], points[index + 1], walls, size);
-    if (!strictRoute) return { path: "", arrows: [], cross: null };
+    if (!strictRoute) return {
+      path: "", arrows: [], footprints: [], cross: null,
+    };
 
     const segment = simplifyStrictRoute(strictRoute, walls, size);
     const swollen = swellLeg(segment, walls, size, swellSide);
@@ -653,10 +699,12 @@ function composeRoute(
 
   const tail = finaleTail(composed, walls, size, points.slice(0, -1));
   if (tail) composed.push(tail);
-  const path = catmullRomPath(composed.map((point) => toPixels(point, size)));
+  const pixels = composed.map((point) => toPixels(point, size));
+  const path = catmullRomPath(pixels);
   return {
     path,
     arrows,
+    footprints: routeFootprints(pixels),
     cross: tail ? toPixels(tail, size) : null,
   };
 }
@@ -885,14 +933,39 @@ function restoreMap(value: string | null): StoredMap | null {
         }];
       })
       : [];
-    const manualRoute = stored.manualRoute === null
-      ? null
-      : Array.isArray(stored.manualRoute)
-        ? stored.manualRoute.flatMap((point) => {
-          if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return [];
-          return [{ x: clamp(point.x, 0, 100), y: clamp(point.y, 0, 100) }];
+    const normalizeRoute = (route: unknown) => (
+      Array.isArray(route)
+        ? route.flatMap((point) => {
+          if (
+            !point
+            || typeof point !== "object"
+            || !("x" in point)
+            || !("y" in point)
+            || !Number.isFinite(point.x)
+            || !Number.isFinite(point.y)
+          ) return [];
+          return [{
+            x: clamp(point.x as number, 0, 100),
+            y: clamp(point.y as number, 0, 100),
+          }];
         })
+        : []
+    );
+    const restoredRoutes = Array.isArray(stored.manualRoutes)
+      ? stored.manualRoutes.map(normalizeRoute).filter((route) => route.length >= 2)
+      : Array.isArray(stored.manualRoute)
+        ? [normalizeRoute(stored.manualRoute)].filter((route) => route.length >= 2)
+        : [];
+    const manualRoutes = stored.manualRoutes === null || stored.manualRoute === null
+      ? null
+      : restoredRoutes.length
+        ? restoredRoutes
         : null;
+    const routeStyle: RouteStyle = stored.routeStyle === "plain"
+      || stored.routeStyle === "footprints"
+      || stored.routeStyle === "arrows"
+      ? stored.routeStyle
+      : "arrows";
     const adventures = stored.adventures && typeof stored.adventures === "object"
       ? Object.fromEntries(
         Object.entries(stored.adventures).flatMap(([id, entry]) => {
@@ -919,7 +992,8 @@ function restoreMap(value: string | null): StoredMap | null {
       },
       positions,
       lines,
-      manualRoute,
+      manualRoutes,
+      routeStyle,
       styled: stored.styled === true,
       adventureOpen: stored.adventureOpen === true,
       adventures,
@@ -940,8 +1014,9 @@ export default function MapPlanner({
   const [positions, setPositions] = useState<Record<string, PointPosition>>({});
   const [lines, setLines] = useState<LineSegment[]>([]);
   const [draftLine, setDraftLine] = useState<DraftLine | null>(null);
-  const [manualRoute, setManualRoute] = useState<PointPosition[] | null>(null);
+  const [manualRoutes, setManualRoutes] = useState<PointPosition[][] | null>(null);
   const [draftRoute, setDraftRoute] = useState<PointPosition[] | null>(null);
+  const [routeStyle, setRouteStyle] = useState<RouteStyle>("arrows");
   const [mode, setMode] = useState<DrawingMode>("points");
   const [styled, setStyled] = useState(false);
   const [adventureOpen, setAdventureOpen] = useState(false);
@@ -974,11 +1049,11 @@ export default function MapPlanner({
       ...places.map((place) => anchored(positions[String(place.id)], 34)),
     ].filter((point): point is PointPosition => Boolean(point));
   }, [places, positions, size]);
-  const routeLayout = useMemo(() => (
-    manualRoute === null
-      ? composeRoute(routePoints, lines, size)
-      : composeDrawnRoute(manualRoute, lines, size)
-  ), [lines, manualRoute, routePoints, size]);
+  const routeLayouts = useMemo(() => (
+    manualRoutes === null
+      ? [composeRoute(routePoints, lines, size)]
+      : manualRoutes.map((route) => composeDrawnRoute(route, lines, size))
+  ), [lines, manualRoutes, routePoints, size]);
   const wallPieces = useMemo(
     () => lines.map((line) => {
       const start = toPixels({ x: line.x1, y: line.y1 }, size);
@@ -1018,7 +1093,8 @@ export default function MapPlanner({
       setSize(stored.size);
       setPositions(stored.positions);
       setLines(stored.lines);
-      setManualRoute(stored.manualRoute);
+      setManualRoutes(stored.manualRoutes);
+      setRouteStyle(stored.routeStyle);
       setStyled(stored.styled);
       setAdventureOpen(stored.adventureOpen);
       setAdventures(restoredAdventures);
@@ -1056,7 +1132,8 @@ export default function MapPlanner({
         size,
         positions,
         lines,
-        manualRoute,
+        manualRoutes,
+        routeStyle,
         styled,
         adventureOpen,
         adventures,
@@ -1064,7 +1141,18 @@ export default function MapPlanner({
     } catch {
       // Storage can be disabled by browser privacy settings.
     }
-  }, [adventureOpen, adventures, lines, locationType, manualRoute, positions, ready, size, styled]);
+  }, [
+    adventureOpen,
+    adventures,
+    lines,
+    locationType,
+    manualRoutes,
+    positions,
+    ready,
+    routeStyle,
+    size,
+    styled,
+  ]);
 
   useEffect(() => {
     if (!adventureOpen) return;
@@ -1235,7 +1323,10 @@ export default function MapPlanner({
       const routeLength = completeRoute.slice(1).reduce((sum, point, index) => (
         sum + pixelDistance(completeRoute[index], point, size)
       ), 0);
-      setManualRoute(routeLength >= 40 ? simplifyDrawnRoute(completeRoute, size) : null);
+      if (routeLength >= 40) {
+        const nextRoute = simplifyDrawnRoute(completeRoute, size);
+        setManualRoutes((current) => current ? [...current, nextRoute] : [nextRoute]);
+      }
     }
     if (draftLine && boardRef.current) {
       const bounds = boardRef.current.getBoundingClientRect();
@@ -1371,6 +1462,21 @@ export default function MapPlanner({
               Маршрут
             </button>
           </div>
+          {mode === "route" ? (
+            <div className="route-style-switch" role="group" aria-label="Оформление маршрута">
+              {routeStyleOptions.map((option) => (
+                <button
+                  className={routeStyle === option.id ? "active" : ""}
+                  type="button"
+                  aria-pressed={routeStyle === option.id}
+                  onClick={() => setRouteStyle(option.id)}
+                  key={option.id}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <button
             className={`beautify-lines${styled ? " active" : ""}`}
             type="button"
@@ -1384,12 +1490,14 @@ export default function MapPlanner({
           <button
             className="undo-line"
             type="button"
-            aria-label={mode === "route" ? "Вернуть автоматический маршрут" : "Отменить последнюю линию"}
-            title={mode === "route" ? "Вернуть автоматический маршрут" : "Отменить последнюю линию"}
-            disabled={mode === "route" ? manualRoute === null : lines.length === 0}
+            aria-label={mode === "route" ? "Отменить последний участок маршрута" : "Отменить последнюю линию"}
+            title={mode === "route" ? "Отменить последний участок маршрута" : "Отменить последнюю линию"}
+            disabled={mode === "route" ? manualRoutes === null : lines.length === 0}
             onClick={() => {
               if (mode === "route") {
-                setManualRoute(null);
+                setManualRoutes((current) => (
+                  current && current.length > 1 ? current.slice(0, -1) : null
+                ));
                 return;
               }
               setLines((current) => current.slice(0, -1));
@@ -1434,30 +1542,55 @@ export default function MapPlanner({
                 ))}
               </g>
             </g>
-            {(adventureOpen || mode === "route") && routeLayout.path && !draftRoute ? (
-              <g className="map-route">
-                <path className="map-route-ink" d={routeLayout.path} />
-                {routeLayout.arrows.map((arrow, index) => (
-                  <path
-                    className="route-arrow"
-                    d="M -9.5 -5.5 L 3.5 0 L -9.5 5.5 C -6.5 3 -6.5 -3 -9.5 -5.5 Z"
-                    transform={`translate(${arrow.x.toFixed(1)} ${arrow.y.toFixed(1)}) rotate(${arrow.angle.toFixed(1)})`}
-                    key={index}
-                  />
-                ))}
-                {routeLayout.cross ? (
-                  <g
-                    className="route-cross"
-                    transform={`translate(${routeLayout.cross.x.toFixed(1)} ${routeLayout.cross.y.toFixed(1)}) rotate(-8)`}
-                  >
-                    <line className="route-cross-under" x1="-12" y1="-12" x2="12" y2="12" />
-                    <line className="route-cross-under" x1="-12" y1="12" x2="12" y2="-12" />
-                    <line className="route-cross-ink" x1="-11" y1="-11" x2="11" y2="11" />
-                    <line className="route-cross-ink" x1="-11" y1="11" x2="11" y2="-11" />
-                  </g>
-                ) : null}
-              </g>
-            ) : null}
+            {(adventureOpen || mode === "route")
+              && !(draftRoute && manualRoutes === null) ? (
+                <g className="map-routes">
+                  {routeLayouts.map((routeLayout, routeIndex) => (
+                    routeLayout.path ? (
+                      <g className="map-route" key={routeIndex}>
+                        {routeStyle !== "footprints" ? (
+                          <path className="map-route-ink" d={routeLayout.path} />
+                        ) : null}
+                        {routeStyle === "arrows"
+                          ? routeLayout.arrows.map((arrow, index) => (
+                            <path
+                              className="route-arrow"
+                              d="M -9.5 -5.5 L 3.5 0 L -9.5 5.5 C -6.5 3 -6.5 -3 -9.5 -5.5 Z"
+                              transform={`translate(${arrow.x.toFixed(1)} ${arrow.y.toFixed(1)}) rotate(${arrow.angle.toFixed(1)})`}
+                              key={index}
+                            />
+                          ))
+                          : null}
+                        {routeStyle === "footprints"
+                          ? routeLayout.footprints.map((footprint, index) => (
+                            <g
+                              className="route-footprint"
+                              transform={`translate(${footprint.x.toFixed(1)} ${footprint.y.toFixed(1)}) rotate(${footprint.angle.toFixed(1)}) scale(1 ${footprint.side})`}
+                              key={index}
+                            >
+                              <ellipse className="footprint-sole" cx="-0.8" cy="0" rx="4.8" ry="2.35" />
+                              <circle className="footprint-toe" cx="4.6" cy="-1.85" r="1.25" />
+                              <circle className="footprint-toe" cx="5.35" cy="-0.25" r="1.1" />
+                              <circle className="footprint-toe" cx="5.15" cy="1.25" r="0.9" />
+                            </g>
+                          ))
+                          : null}
+                        {routeLayout.cross ? (
+                          <g
+                            className="route-cross"
+                            transform={`translate(${routeLayout.cross.x.toFixed(1)} ${routeLayout.cross.y.toFixed(1)}) rotate(-8)`}
+                          >
+                            <line className="route-cross-under" x1="-12" y1="-12" x2="12" y2="12" />
+                            <line className="route-cross-under" x1="-12" y1="12" x2="12" y2="-12" />
+                            <line className="route-cross-ink" x1="-11" y1="-11" x2="11" y2="11" />
+                            <line className="route-cross-ink" x1="-11" y1="11" x2="11" y2="-11" />
+                          </g>
+                        ) : null}
+                      </g>
+                    ) : null
+                  ))}
+                </g>
+              ) : null}
             {draftRoute?.length ? (
               <path
                 className="draft-route"
