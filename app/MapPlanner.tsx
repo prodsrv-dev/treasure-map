@@ -479,7 +479,13 @@ function swellSegment(
   const fromPixels = toPixels(from, size);
   const toPixelsPoint = toPixels(to, size);
   const length = Math.hypot(toPixelsPoint.x - fromPixels.x, toPixelsPoint.y - fromPixels.y);
-  const stops = length > 170 ? [1 / 3, 2 / 3] : length > 84 ? [0.5] : [];
+  const stops = length > 280
+    ? [0.2, 0.5, 0.8]
+    : length > 155
+      ? [1 / 3, 2 / 3]
+      : length > 74
+        ? [0.5]
+        : [];
   if (!stops.length) return { inserted: [] as PointPosition[], side: initialSide };
 
   const direction = {
@@ -487,43 +493,64 @@ function swellSegment(
     y: (toPixelsPoint.y - fromPixels.y) / length,
   };
   const perpendicular = { x: -direction.y, y: direction.x };
-  const amplitude = clamp(length * 0.18, 12, 36);
+  const amplitude = clamp(length * 0.34, 30, 110);
+  const middle = {
+    x: ((fromPixels.x + toPixelsPoint.x) / 2 / size.width) * 100,
+    y: ((fromPixels.y + toPixelsPoint.y) / 2 / size.height) * 100,
+  };
+  const nearestWall = awayFromNearestWall(middle, walls, size);
+  const preferredSide = nearestWall && nearestWall.distance < 110
+    ? Math.sign(
+      nearestWall.away.x * perpendicular.x
+      + nearestWall.away.y * perpendicular.y,
+    ) || initialSide
+    : initialSide;
 
-  let side = initialSide;
-  let anchor = from;
-  const inserted: PointPosition[] = [];
-  stops.forEach((stop) => {
-    const base = {
-      x: fromPixels.x + (toPixelsPoint.x - fromPixels.x) * stop,
-      y: fromPixels.y + (toPixelsPoint.y - fromPixels.y) * stop,
-    };
-    const basePercent = {
-      x: (base.x / size.width) * 100,
-      y: (base.y / size.height) * 100,
-    };
-    const wall = awayFromNearestWall(basePercent, walls, size);
-    const preferred = wall && wall.distance < 72
-      ? Math.sign(wall.away.x * perpendicular.x + wall.away.y * perpendicular.y) || side
-      : side;
+  const candidates = [preferredSide, -preferredSide].flatMap((side) => (
+    [1, 0.82, 0.64, 0.48, 0.34].map((factor) => {
+      const inserted = stops.map((stop) => {
+        const bow = Math.sin(Math.PI * stop);
+        return {
+          x: ((fromPixels.x
+            + (toPixelsPoint.x - fromPixels.x) * stop
+            + perpendicular.x * side * amplitude * factor * bow) / size.width) * 100,
+          y: ((fromPixels.y
+            + (toPixelsPoint.y - fromPixels.y) * stop
+            + perpendicular.y * side * amplitude * factor * bow) / size.height) * 100,
+        };
+      });
+      const route = [from, ...inserted, to];
+      const insideBoard = inserted.every((point) => (
+        point.x >= 3 && point.x <= 97 && point.y >= 5 && point.y <= 95
+      ));
+      const clearsWalls = route.slice(0, -1).every((point, index) => (
+        wallCrossings(point, route[index + 1], walls, size).length === 0
+        && !runsTooCloseToWall(point, route[index + 1], walls, size, 8)
+      ));
+      const clearance = inserted.reduce((nearest, point) => (
+        Math.min(
+          nearest,
+          ...walls.map((wall) => distanceToWall(point, wall, size)),
+        )
+      ), Infinity);
 
-    for (const magnitude of [amplitude, amplitude * 0.5]) {
-      const candidate = {
-        x: ((base.x + perpendicular.x * preferred * magnitude) / size.width) * 100,
-        y: ((base.y + perpendicular.y * preferred * magnitude) / size.height) * 100,
+      return {
+        side,
+        inserted,
+        valid: insideBoard && clearsWalls,
+        score: factor * 100
+          + Math.min(clearance, 45) * 0.2
+          + (side === preferredSide ? 5 : 0),
       };
-      if (candidate.x < 3 || candidate.x > 97 || candidate.y < 5 || candidate.y > 95) continue;
-      if (wallCrossings(anchor, candidate, walls, size).length > 0) continue;
-      if (wallCrossings(candidate, to, walls, size).length > 0) continue;
-      if (runsTooCloseToWall(anchor, candidate, walls, size, 12)) continue;
-      if (runsTooCloseToWall(candidate, to, walls, size, 12)) continue;
+    })
+  ));
+  const chosen = candidates
+    .filter((candidate) => candidate.valid)
+    .sort((first, second) => second.score - first.score)[0];
 
-      inserted.push(candidate);
-      anchor = candidate;
-      side = -preferred;
-      break;
-    }
-  });
-  return { inserted, side };
+  return chosen
+    ? { inserted: chosen.inserted, side: -chosen.side }
+    : { inserted: [] as PointPosition[], side: initialSide };
 }
 
 function swellLeg(
