@@ -573,7 +573,9 @@ h2 {
 }
 
 .map-mode-switch {
-  display: inline-flex;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   border: 1px solid rgba(255, 255, 255, 0.34);
 }
 
@@ -581,6 +583,7 @@ h2 {
   min-height: 46px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   border: 0;
   border-right: 1px solid rgba(255, 255, 255, 0.34);
@@ -591,7 +594,8 @@ h2 {
   font: inherit;
   font-size: 13px;
   font-weight: 700;
-  padding: 0 16px;
+  padding: 0 10px;
+  text-align: center;
 }
 
 .map-mode-switch button:last-child {
@@ -601,6 +605,10 @@ h2 {
 .map-mode-switch button.active {
   background: white;
   color: var(--green);
+}
+
+.map-mode-switch button.complete {
+  background: rgba(255, 255, 255, 0.13);
 }
 
 .map-mode-switch button:disabled {
@@ -654,38 +662,6 @@ h2 {
   margin-left: auto;
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
-}
-
-.beautify-lines {
-  min-height: 46px;
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.34);
-  border-radius: 0;
-  background: transparent;
-  color: white;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 0 16px;
-}
-
-.beautify-lines span {
-  color: #f1a28f;
-  font-size: 17px;
-}
-
-.beautify-lines:hover,
-.beautify-lines:focus-visible,
-.beautify-lines.active {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.beautify-lines:disabled {
-  cursor: not-allowed;
-  opacity: 0.38;
 }
 
 .standard-size-picker {
@@ -1925,6 +1901,22 @@ h2 {
     grid-template-columns: 1fr;
   }
 
+  .map-mode-switch {
+    grid-template-columns: 1fr;
+  }
+
+  .map-mode-switch button {
+    justify-content: flex-start;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.34);
+    padding: 0 14px;
+    text-align: left;
+  }
+
+  .map-mode-switch button:last-child {
+    border-bottom: 0;
+  }
+
   .places-section {
     grid-template-columns: 1fr;
     gap: 38px;
@@ -2014,12 +2006,6 @@ h2 {
   .route-style-switch button {
     flex: 1;
     padding: 0 8px;
-  }
-
-  .beautify-lines {
-    width: calc(100% - 56px);
-    order: 3;
-    justify-content: center;
   }
 
   .line-count {

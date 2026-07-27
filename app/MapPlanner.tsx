@@ -1457,6 +1457,13 @@ export default function MapPlanner({
     cancelPointerAction();
     setMode("split");
 
+    if (!styled) {
+      setPartitionCells([]);
+      setPartitionSchemaVersion(0);
+      setPartitionError("Сначала выровняйте и стилизуйте карту.");
+      return;
+    }
+
     if (!canPartition) {
       setPartitionCells([]);
       setPartitionSchemaVersion(0);
@@ -1749,6 +1756,7 @@ export default function MapPlanner({
   function beautifyMap() {
     if (!boardRef.current || !lines.length) return;
 
+    cancelPointerAction();
     const bounds = boardRef.current.getBoundingClientRect();
     setLines((current) => beautifyLines(current, bounds));
     setStyled(true);
@@ -1826,7 +1834,7 @@ export default function MapPlanner({
 
       <div className="map-workspace" ref={workspaceRef}>
         <div className="map-toolbar" role="toolbar" aria-label="Инструменты карты">
-          <div className="map-mode-switch" role="group" aria-label="Режим работы">
+          <div className="map-mode-switch" role="group" aria-label="Шаги подготовки карты">
             <button
               className={mode === "points" ? "active" : ""}
               type="button"
@@ -1864,15 +1872,25 @@ export default function MapPlanner({
               Начертить маршрут
             </button>
             <button
+              className={styled ? "complete" : ""}
+              type="button"
+              aria-pressed={styled}
+              disabled={lines.length === 0}
+              onClick={beautifyMap}
+            >
+              <span aria-hidden="true">4</span>
+              Выровнять и стилизовать
+            </button>
+            <button
               className={mode === "split" ? "active" : ""}
               type="button"
               aria-pressed={mode === "split"}
               aria-label="Разбить на части"
               title="Разбить на части"
-              disabled={!canPartition}
+              disabled={!canPartition || !styled}
               onClick={buildPartition}
             >
-              <span aria-hidden="true">4</span>
+              <span aria-hidden="true">5</span>
               Разбить на части
             </button>
           </div>
@@ -1891,15 +1909,6 @@ export default function MapPlanner({
               ))}
             </div>
           ) : null}
-          <button
-            className={`beautify-lines${styled ? " active" : ""}`}
-            type="button"
-            disabled={lines.length === 0}
-            onClick={beautifyMap}
-          >
-            <span aria-hidden="true">✦</span>
-            Выровнять и стилизовать
-          </button>
           <div className="standard-size-picker">
             <button
               className={`standard-size-trigger${sizeMenuOpen ? " active" : ""}`}
