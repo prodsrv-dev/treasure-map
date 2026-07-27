@@ -1875,10 +1875,16 @@ export default function MapPlanner({
               className={styled ? "complete" : ""}
               type="button"
               aria-pressed={styled}
+              aria-label={styled
+                ? "Выровнять и стилизовать повторно"
+                : "Выровнять и стилизовать"}
+              title={styled
+                ? "Нажмите, чтобы повторно подравнять карту"
+                : "Подравнять линии и оформить карту"}
               disabled={lines.length === 0}
               onClick={beautifyMap}
             >
-              <span aria-hidden="true">4</span>
+              <span aria-hidden="true">{styled ? "4 ✓" : "4"}</span>
               Выровнять и стилизовать
             </button>
             <button

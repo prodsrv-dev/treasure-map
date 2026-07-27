@@ -608,7 +608,21 @@ h2 {
 }
 
 .map-mode-switch button.complete {
-  background: rgba(255, 255, 255, 0.13);
+  background: rgba(241, 162, 143, 0.18);
+  box-shadow: inset 0 -3px 0 #f1a28f;
+  color: white;
+}
+
+.map-mode-switch button:not(:disabled):not(.active):hover,
+.map-mode-switch button:not(:disabled):not(.active):focus-visible {
+  background: #f7f3ea;
+  box-shadow: inset 0 -3px 0 #f1a28f;
+  color: var(--green);
+  outline: none;
+}
+
+.map-mode-switch button:not(:disabled):active {
+  background: #eadfce;
 }
 
 .map-mode-switch button:disabled {
