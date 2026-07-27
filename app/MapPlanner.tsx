@@ -9,10 +9,13 @@ import {
   useRef,
   useState,
 } from "react";
+import MapBackDesigner from "./MapBackDesigner";
+import { boardSizeForPrint, getPrintMetrics } from "./mapExport";
 import RiddleDesigner, {
   AdventureEntry,
   MarkerKind,
   createDefaultAdventure,
+  isLegacyRiddle,
   markerCatalog,
 } from "./RiddleDesigner";
 
@@ -38,17 +41,24 @@ type StoredMap = {
   size: BoardSize;
   positions: Record<string, PointPosition>;
   lines: LineSegment[];
+  partitionCells: PartitionCell[];
+  partitionVersion?: number;
   manualRoutes: PointPosition[][] | null;
   manualRoute?: PointPosition[] | null;
   routeStyle: RouteStyle;
   styled: boolean;
   adventureOpen: boolean;
+  backOpen?: boolean;
+  seekerName: string;
   adventures: Record<string, AdventureEntry>;
 };
 
 type ResizeAxis = "x" | "y" | "xy";
-type PointId = number | "start" | "treasure";
-type DrawingMode = "points" | "lines" | "route";
+type PointId = number | "start";
+const FINAL_COMPOSITE_BOTTOM_GUARD = 110;
+const MIN_PARTITION_SEED_DISTANCE = 42;
+const PARTITION_VERSION = 4;
+type DrawingMode = "points" | "lines" | "route" | "split";
 type RouteStyle = "plain" | "arrows" | "footprints";
 
 type LineSegment = {
@@ -78,8 +88,31 @@ type RouteLayout = {
   cross: { x: number; y: number } | null;
 };
 
+type PartitionSeed = {
+  id: string;
+  point: PointPosition;
+};
+
+type PartitionCell = {
+  id: string;
+  points: PointPosition[];
+};
+
+type CutSegment = {
+  id: string;
+  start: PointPosition;
+  end: PointPosition;
+};
+
 const DEFAULT_SIZE: BoardSize = { width: 920, height: 540 };
 const MIN_SIZE: BoardSize = { width: 360, height: 320 };
+const STANDARD_PRINT_SIZES = [
+  { id: "a5", label: "A5", widthCm: 21, heightCm: 14.8 },
+  { id: "a4", label: "A4", widthCm: 29.7, heightCm: 21 },
+  { id: "a3", label: "A3", widthCm: 42, heightCm: 29.7 },
+  { id: "a2", label: "A2", widthCm: 59.4, heightCm: 42 },
+] as const;
+const MAX_SIZE = boardSizeForPrint(59.4, 42);
 const boundaryLabel: Record<LocationType, string> = {
   apartment: "квартиры",
   dacha: "дачного участка",
@@ -99,6 +132,10 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function finalPositionMaxY(height: number) {
+  return Math.max(5, 100 - (FINAL_COMPOSITE_BOTTOM_GUARD / height) * 100);
+}
+
 function toPixels(point: PointPosition, size: BoardSize) {
   return {
     x: (point.x / 100) * size.width,
@@ -110,6 +147,128 @@ function pixelDistance(first: PointPosition, second: PointPosition, size: BoardS
   const a = toPixels(first, size);
   const b = toPixels(second, size);
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function clipPolygonToHalfPlane(
+  polygon: PointPosition[],
+  a: number,
+  b: number,
+  c: number,
+) {
+  if (!polygon.length) return [];
+
+  const result: PointPosition[] = [];
+  const signedDistance = (point: PointPosition) => a * point.x + b * point.y - c;
+
+  polygon.forEach((end, index) => {
+    const start = polygon[(index + polygon.length - 1) % polygon.length];
+    const startDistance = signedDistance(start);
+    const endDistance = signedDistance(end);
+    const startInside = startDistance <= 0.0001;
+    const endInside = endDistance <= 0.0001;
+
+    if (startInside !== endInside) {
+      const progress = startDistance / (startDistance - endDistance);
+      result.push({
+        x: start.x + (end.x - start.x) * progress,
+        y: start.y + (end.y - start.y) * progress,
+      });
+    }
+    if (endInside) result.push(end);
+  });
+
+  return result;
+}
+
+function createPartitionCells(seeds: PartitionSeed[], size: BoardSize): PartitionCell[] {
+  if (seeds.length < 2) return [];
+
+  const pixels = seeds.map(({ id, point }) => ({ id, point: toPixels(point, size) }));
+  const startSeed = pixels.find((seed) => seed.id === "start");
+  const nearestStartDistanceSquared = startSeed
+    ? Math.min(
+      ...pixels
+        .filter((seed) => seed.id !== "start")
+        .map((seed) => (
+          (seed.point.x - startSeed.point.x) ** 2
+          + (seed.point.y - startSeed.point.y) ** 2
+        )),
+    )
+    : 0;
+  const startWeight = startSeed
+    ? Math.min(
+      Math.min(size.width, size.height) ** 2 * 0.045,
+      nearestStartDistanceSquared * 0.36,
+    )
+    : 0;
+
+  return pixels.flatMap((seed, index) => {
+    let polygon: PointPosition[] = [
+      { x: 0, y: 0 },
+      { x: size.width, y: 0 },
+      { x: size.width, y: size.height },
+      { x: 0, y: size.height },
+    ];
+    const weight = seed.id === "start" ? startWeight : 0;
+
+    pixels.forEach((other, otherIndex) => {
+      if (otherIndex === index || polygon.length < 3) return;
+
+      const otherWeight = other.id === "start" ? startWeight : 0;
+      const a = 2 * (other.point.x - seed.point.x);
+      const b = 2 * (other.point.y - seed.point.y);
+      const c = other.point.x ** 2 + other.point.y ** 2
+        - seed.point.x ** 2 - seed.point.y ** 2
+        + weight - otherWeight;
+      polygon = clipPolygonToHalfPlane(polygon, a, b, c);
+    });
+
+    if (polygon.length < 3) return [];
+    return [{
+      id: seeds[index].id,
+      points: polygon.map((point) => ({
+        x: clamp((point.x / size.width) * 100, 0, 100),
+        y: clamp((point.y / size.height) * 100, 0, 100),
+      })),
+    }];
+  });
+}
+
+function partitionCellPath(cell: PartitionCell, size: BoardSize) {
+  if (cell.points.length < 3) return "";
+
+  const pixels = cell.points.map((point) => toPixels(point, size));
+  return `${pixels.map((point, index) => (
+    `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`
+  )).join(" ")} Z`;
+}
+
+function isOuterBoundaryEdge(start: PointPosition, end: PointPosition) {
+  const epsilon = 0.001;
+  return (
+    (Math.abs(start.x) < epsilon && Math.abs(end.x) < epsilon)
+    || (Math.abs(start.x - 100) < epsilon && Math.abs(end.x - 100) < epsilon)
+    || (Math.abs(start.y) < epsilon && Math.abs(end.y) < epsilon)
+    || (Math.abs(start.y - 100) < epsilon && Math.abs(end.y - 100) < epsilon)
+  );
+}
+
+function partitionCutSegments(cells: PartitionCell[]): CutSegment[] {
+  const segments = new Map<string, CutSegment>();
+  const pointKey = (point: PointPosition) => `${point.x.toFixed(4)},${point.y.toFixed(4)}`;
+
+  cells.forEach((cell) => {
+    cell.points.forEach((start, index) => {
+      const end = cell.points[(index + 1) % cell.points.length];
+      if (isOuterBoundaryEdge(start, end)) return;
+
+      const endpoints = [pointKey(start), pointKey(end)].sort();
+      const id = endpoints.join("|");
+      if (!segments.has(id)) segments.set(id, { id, start, end });
+    });
+  });
+
+  return [...segments.values()];
 }
 
 function distanceToWall(point: PointPosition, wall: LineSegment, size: BoardSize) {
@@ -426,13 +585,13 @@ function routeFootprints(points: Array<{ x: number; y: number }>): RouteFootprin
   ), 0);
   const marks: RouteFootprint[] = [];
 
-  for (let distance = 20, index = 0; distance < totalLength - 12; distance += 27, index += 1) {
+  for (let distance = 14, index = 0; distance < totalLength - 12; distance += 24, index += 1) {
     const point = routePointAtDistance(points, distance);
     if (!point) continue;
 
     const side = index % 2 === 0 ? -1 : 1;
     const angle = (point.angle * Math.PI) / 180;
-    const offset = 3.8 * side;
+    const offset = 2.8 * side;
     marks.push({
       x: point.x - Math.sin(angle) * offset,
       y: point.y + Math.cos(angle) * offset,
@@ -712,15 +871,6 @@ function composeRoute(
   };
 }
 
-function availableBoardWidth(workspace: HTMLDivElement | null, fallback: number) {
-  if (!workspace) return fallback;
-
-  const styles = window.getComputedStyle(workspace);
-  return workspace.clientWidth
-    - Number.parseFloat(styles.paddingLeft)
-    - Number.parseFloat(styles.paddingRight);
-}
-
 function pointDistance(first: PointPosition, second: PointPosition, bounds: DOMRect) {
   return Math.hypot(
     ((first.x - second.x) / 100) * bounds.width,
@@ -936,6 +1086,25 @@ function restoreMap(value: string | null): StoredMap | null {
         }];
       })
       : [];
+    const partitionCells = Array.isArray(stored.partitionCells)
+      ? stored.partitionCells.flatMap((cell) => {
+        if (!cell || typeof cell.id !== "string" || !Array.isArray(cell.points)) return [];
+
+        const points = cell.points.flatMap((point) => {
+          if (
+            !point
+            || !Number.isFinite(point.x)
+            || !Number.isFinite(point.y)
+          ) return [];
+
+          return [{
+            x: clamp(point.x, 0, 100),
+            y: clamp(point.y, 0, 100),
+          }];
+        });
+        return points.length >= 3 ? [{ id: cell.id, points }] : [];
+      })
+      : [];
     const normalizeRoute = (route: unknown) => (
       Array.isArray(route)
         ? route.flatMap((point) => {
@@ -995,10 +1164,18 @@ function restoreMap(value: string | null): StoredMap | null {
       },
       positions,
       lines,
+      partitionCells,
+      partitionVersion: stored.partitionVersion === PARTITION_VERSION
+        ? PARTITION_VERSION
+        : undefined,
       manualRoutes,
       routeStyle,
       styled: stored.styled === true,
       adventureOpen: stored.adventureOpen === true,
+      backOpen: stored.backOpen === true,
+      seekerName: typeof stored.seekerName === "string"
+        ? stored.seekerName.slice(0, 40)
+        : "",
       adventures,
     };
   } catch {
@@ -1009,13 +1186,18 @@ function restoreMap(value: string | null): StoredMap | null {
 export default function MapPlanner({
   locationType,
   places,
+  seekerName,
 }: {
   locationType: LocationType;
   places: MapPlace[];
+  seekerName: string;
 }) {
   const [size, setSize] = useState<BoardSize>(DEFAULT_SIZE);
   const [positions, setPositions] = useState<Record<string, PointPosition>>({});
   const [lines, setLines] = useState<LineSegment[]>([]);
+  const [partitionCells, setPartitionCells] = useState<PartitionCell[]>([]);
+  const [partitionSchemaVersion, setPartitionSchemaVersion] = useState(0);
+  const [partitionError, setPartitionError] = useState<string | null>(null);
   const [draftLine, setDraftLine] = useState<DraftLine | null>(null);
   const [manualRoutes, setManualRoutes] = useState<PointPosition[][] | null>(null);
   const [draftRoute, setDraftRoute] = useState<PointPosition[] | null>(null);
@@ -1023,6 +1205,9 @@ export default function MapPlanner({
   const [mode, setMode] = useState<DrawingMode>("points");
   const [styled, setStyled] = useState(false);
   const [adventureOpen, setAdventureOpen] = useState(false);
+  const [backOpen, setBackOpen] = useState(false);
+  const [exportPreview, setExportPreview] = useState(false);
+  const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
   const [adventures, setAdventures] = useState<Record<string, AdventureEntry>>({});
   const [ready, setReady] = useState(false);
   const [draggingId, setDraggingId] = useState<PointId | null>(null);
@@ -1036,13 +1221,42 @@ export default function MapPlanner({
     startY: number;
     startWidth: number;
     startHeight: number;
+    displayScale: number;
   } | null>(null);
+  const finalPlace = places[places.length - 1];
+  const finalPlaceKey = finalPlace ? String(finalPlace.id) : null;
+  const finalPosition = finalPlaceKey
+    ? positions[finalPlaceKey] ?? positions.treasure
+    : positions.treasure;
+  const partitionSeeds = useMemo<PartitionSeed[]>(() => {
+    const seeds: PartitionSeed[] = [];
+    if (positions.start) seeds.push({ id: "start", point: positions.start });
+    places.forEach((place) => {
+      const id = String(place.id);
+      const point = place.id === finalPlace?.id ? finalPosition : positions[id];
+      if (point) seeds.push({ id, point });
+    });
+    return seeds;
+  }, [finalPlace?.id, finalPosition, places, positions]);
+  const totalPoints = places.length + 1;
+  const canPartition = partitionSeeds.length === totalPoints
+    && partitionSeeds.length >= 2;
+  const cutSegments = useMemo(
+    () => partitionCutSegments(partitionCells),
+    [partitionCells],
+  );
+  const printMetrics = useMemo(() => getPrintMetrics(size), [size]);
+  const selectedStandardSize = STANDARD_PRINT_SIZES.find((format) => {
+    const standard = boardSizeForPrint(format.widthCm, format.heightCm);
+    return Math.abs(standard.width - size.width) <= 1
+      && Math.abs(standard.height - size.height) <= 1;
+  });
 
   const placedCount = useMemo(
-    () => places.filter((place) => positions[String(place.id)]).length
-      + (positions.start ? 1 : 0)
-      + (positions.treasure ? 1 : 0),
-    [places, positions],
+    () => places.filter((place) => (
+      place.id === finalPlace?.id ? finalPosition : positions[String(place.id)]
+    )).length + (positions.start ? 1 : 0),
+    [finalPlace?.id, finalPosition, places, positions],
   );
   const routePoints = useMemo(() => {
     const anchored = (point: PointPosition | undefined, drop: number) => (
@@ -1050,15 +1264,17 @@ export default function MapPlanner({
     );
     return [
       anchored(positions.start, 24),
-      ...places.map((place) => anchored(positions[String(place.id)], 34)),
-      anchored(positions.treasure, 28),
+      ...places.map((place) => anchored(
+        place.id === finalPlace?.id ? finalPosition : positions[String(place.id)],
+        place.id === finalPlace?.id ? 66 : 34,
+      )),
     ].filter((point): point is PointPosition => Boolean(point));
-  }, [places, positions, size]);
+  }, [finalPlace?.id, finalPosition, places, positions, size]);
   const routeLayouts = useMemo(() => (
     manualRoutes === null
-      ? [composeRoute(routePoints, lines, size, !positions.treasure)]
+      ? [composeRoute(routePoints, lines, size, !finalPosition)]
       : manualRoutes.map((route) => composeDrawnRoute(route, lines, size))
-  ), [lines, manualRoutes, positions.treasure, routePoints, size]);
+  ), [finalPosition, lines, manualRoutes, routePoints, size]);
   const wallPieces = useMemo(
     () => lines.map((line) => {
       const start = toPixels({ x: line.x1, y: line.y1 }, size);
@@ -1070,12 +1286,17 @@ export default function MapPlanner({
     }),
     [lines, size],
   );
-  const totalPoints = places.length + 2;
   const lineCountLabel = lines.length === 1
     ? "1 линия"
     : lines.length > 1 && lines.length < 5
       ? `${lines.length} линии`
       : `${lines.length} линий`;
+  const partitionCountLabel = partitionCells.length === 1
+    ? "1 часть"
+    : partitionCells.length > 1 && partitionCells.length < 5
+      ? `${partitionCells.length} части`
+      : `${partitionCells.length} частей`;
+  const toolbarStatusLabel = mode === "split" ? partitionCountLabel : lineCountLabel;
 
   useEffect(() => {
     let stored: StoredMap | null = null;
@@ -1095,39 +1316,71 @@ export default function MapPlanner({
           restoredAdventures[key] = suggested;
         }
       });
+      const restoredPositions = { ...stored.positions };
+      if (finalPlaceKey) {
+        const restoredFinalPosition = restoredPositions[finalPlaceKey] ?? restoredPositions.treasure;
+        if (restoredFinalPosition) {
+          const fittedFinalPosition = {
+            ...restoredFinalPosition,
+            y: Math.min(restoredFinalPosition.y, finalPositionMaxY(stored.size.height)),
+          };
+          restoredPositions[finalPlaceKey] = fittedFinalPosition;
+          restoredPositions.treasure = fittedFinalPosition;
+        }
+      }
       setSize(stored.size);
-      setPositions(stored.positions);
+      setPositions(restoredPositions);
       setLines(stored.lines);
+      const validPartitionIds = new Set([
+        "start",
+        ...places.map((place) => String(place.id)),
+      ]);
+      const restoredPartitionCells = stored.partitionCells.filter((cell) => validPartitionIds.has(cell.id));
+      const restoredPartitionSeeds: PartitionSeed[] = [];
+      if (restoredPositions.start) {
+        restoredPartitionSeeds.push({ id: "start", point: restoredPositions.start });
+      }
+      places.forEach((place) => {
+        const id = String(place.id);
+        const point = place.id === finalPlace?.id
+          ? restoredPositions[id] ?? restoredPositions.treasure
+          : restoredPositions[id];
+        if (point) restoredPartitionSeeds.push({ id, point });
+      });
+      const shouldMigratePartition = stored.partitionVersion !== PARTITION_VERSION
+        && restoredPartitionSeeds.length === validPartitionIds.size;
+      const migratedPartitionCells = shouldMigratePartition
+        ? createPartitionCells(restoredPartitionSeeds, stored.size)
+        : [];
+      const nextPartitionCells = restoredPartitionCells.length === validPartitionIds.size
+        ? restoredPartitionCells
+        : migratedPartitionCells;
+      setPartitionCells(
+        nextPartitionCells.length === validPartitionIds.size ? nextPartitionCells : [],
+      );
+      setPartitionSchemaVersion(
+        nextPartitionCells.length === validPartitionIds.size ? PARTITION_VERSION : 0,
+      );
+      setPartitionError(null);
       setManualRoutes(stored.manualRoutes);
       setRouteStyle(stored.routeStyle);
       setStyled(stored.styled);
       setAdventureOpen(stored.adventureOpen);
+      setBackOpen(
+        (stored.backOpen === true
+          || (shouldMigratePartition && stored.adventureOpen === true))
+        && nextPartitionCells.length === validPartitionIds.size,
+      );
       setAdventures(restoredAdventures);
       nextLineId.current = Math.max(0, ...stored.lines.map((line) => line.id)) + 1;
+    } else {
+      setPartitionCells([]);
+      setPartitionSchemaVersion(0);
+      setPartitionError(null);
+      setBackOpen(false);
     }
     setReady(true);
   }, [locationType]);
-
-  useEffect(() => {
-    function fitBoardToWorkspace() {
-      const availableWidth = availableBoardWidth(workspaceRef.current, 0);
-      if (availableWidth <= 0) return;
-
-      setSize((current) => {
-        if (current.width <= availableWidth) return current;
-
-        const scale = availableWidth / current.width;
-        return {
-          width: Math.round(availableWidth),
-          height: Math.max(MIN_SIZE.height, Math.round(current.height * scale)),
-        };
-      });
-    }
-
-    fitBoardToWorkspace();
-    window.addEventListener("resize", fitBoardToWorkspace);
-    return () => window.removeEventListener("resize", fitBoardToWorkspace);
-  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -1137,10 +1390,16 @@ export default function MapPlanner({
         size,
         positions,
         lines,
+        partitionCells,
+        partitionVersion: partitionCells.length === totalPoints
+          ? partitionSchemaVersion
+          : undefined,
         manualRoutes,
         routeStyle,
         styled,
         adventureOpen,
+        backOpen,
+        seekerName,
         adventures,
       }));
     } catch {
@@ -1149,12 +1408,16 @@ export default function MapPlanner({
   }, [
     adventureOpen,
     adventures,
+    backOpen,
     lines,
     locationType,
     manualRoutes,
+    partitionCells,
+    partitionSchemaVersion,
     positions,
     ready,
     routeStyle,
+    seekerName,
     size,
     styled,
   ]);
@@ -1167,7 +1430,7 @@ export default function MapPlanner({
       const next = { ...current };
       places.forEach((place, index) => {
         const key = String(place.id);
-        if (!next[key]) {
+        if (!next[key] || isLegacyRiddle(next[key].riddle)) {
           next[key] = createDefaultAdventure(place, index, locationType);
           changed = true;
         }
@@ -1176,17 +1439,83 @@ export default function MapPlanner({
     });
   }, [adventureOpen, locationType, places]);
 
+  useEffect(() => {
+    if (!ready || !backOpen) return;
+    requestAnimationFrame(() => {
+      document.getElementById("map-back")?.scrollIntoView({ block: "start" });
+    });
+  }, [backOpen, ready]);
+
+  function invalidatePartition() {
+    setPartitionCells([]);
+    setPartitionSchemaVersion(0);
+    setPartitionError(null);
+    setBackOpen(false);
+  }
+
+  function buildPartition() {
+    cancelPointerAction();
+    setMode("split");
+
+    if (!canPartition) {
+      setPartitionCells([]);
+      setPartitionSchemaVersion(0);
+      setPartitionError("Сначала расставьте все точки на карте.");
+      return;
+    }
+
+    for (let first = 0; first < partitionSeeds.length; first += 1) {
+      for (let second = first + 1; second < partitionSeeds.length; second += 1) {
+        if (
+          pixelDistance(partitionSeeds[first].point, partitionSeeds[second].point, size)
+          < MIN_PARTITION_SEED_DISTANCE
+        ) {
+          setPartitionCells([]);
+          setPartitionSchemaVersion(0);
+          setPartitionError("Две точки стоят слишком близко. Разведите их и повторите разбиение.");
+          return;
+        }
+      }
+    }
+
+    const nextCells = createPartitionCells(partitionSeeds, size);
+    if (nextCells.length !== partitionSeeds.length) {
+      setPartitionCells([]);
+      setPartitionSchemaVersion(0);
+      setPartitionError("Не удалось построить замкнутые части. Немного раздвиньте точки.");
+      return;
+    }
+
+    setPartitionCells(nextCells);
+    setPartitionSchemaVersion(PARTITION_VERSION);
+    setPartitionError(null);
+  }
+
   function updatePointFromPointer(event: ReactPointerEvent) {
     if (mode !== "points" || draggingId === null || !boardRef.current) return;
 
     const bounds = boardRef.current.getBoundingClientRect();
-    setPositions((current) => ({
-      ...current,
-      [String(draggingId)]: {
-        x: clamp(((event.clientX - bounds.left) / bounds.width) * 100, 3, 97),
-        y: clamp(((event.clientY - bounds.top) / bounds.height) * 100, 5, 95),
-      },
-    }));
+    const pointKey = String(draggingId);
+    const isFinalPoint = pointKey === finalPlaceKey;
+    const nextPosition = {
+      x: clamp(((event.clientX - bounds.left) / bounds.width) * 100, 3, 97),
+      y: clamp(
+        ((event.clientY - bounds.top) / bounds.height) * 100,
+        5,
+        isFinalPoint ? finalPositionMaxY(size.height) : 95,
+      ),
+    };
+    invalidatePartition();
+    setPositions((current) => {
+      if (isFinalPoint && finalPlaceKey) {
+        return {
+          ...current,
+          [finalPlaceKey]: nextPosition,
+          treasure: nextPosition,
+        };
+      }
+      return { ...current, [pointKey]: nextPosition };
+    });
   }
 
   function startPointDrag(event: ReactPointerEvent<HTMLButtonElement>, id: PointId) {
@@ -1201,6 +1530,16 @@ export default function MapPlanner({
   function movePointWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, id: PointId) {
     if (mode !== "points") return;
 
+    const pointKey = String(id);
+    const isFinalPoint = pointKey === finalPlaceKey;
+    const setPointPosition = (position: PointPosition) => {
+      invalidatePartition();
+      setPositions((current) => (
+        isFinalPoint && finalPlaceKey
+          ? { ...current, [finalPlaceKey]: position, treasure: position }
+          : { ...current, [pointKey]: position }
+      ));
+    };
     const direction = {
       ArrowLeft: [-2, 0],
       ArrowRight: [2, 0],
@@ -1209,22 +1548,24 @@ export default function MapPlanner({
     }[event.key];
 
     if (!direction) {
-      if (event.key === "Enter" && !positions[String(id)]) {
+      const pointPosition = isFinalPoint ? finalPosition : positions[pointKey];
+      if (event.key === "Enter" && !pointPosition) {
         event.preventDefault();
-        setPositions((current) => ({ ...current, [String(id)]: { x: 50, y: 50 } }));
+        setPointPosition({ x: 50, y: 50 });
       }
       return;
     }
 
     event.preventDefault();
-    const currentPosition = positions[String(id)] ?? { x: 12, y: 16 };
-    setPositions((current) => ({
-      ...current,
-      [String(id)]: {
-        x: clamp(currentPosition.x + direction[0], 3, 97),
-        y: clamp(currentPosition.y + direction[1], 5, 95),
-      },
-    }));
+    const currentPosition = (isFinalPoint ? finalPosition : positions[pointKey]) ?? { x: 12, y: 16 };
+    setPointPosition({
+      x: clamp(currentPosition.x + direction[0], 3, 97),
+      y: clamp(
+        currentPosition.y + direction[1],
+        5,
+        isFinalPoint ? finalPositionMaxY(size.height) : 95,
+      ),
+    });
   }
 
   function startResize(event: ReactPointerEvent<HTMLButtonElement>, axis: ResizeAxis) {
@@ -1238,9 +1579,12 @@ export default function MapPlanner({
       axis,
       startX: event.clientX,
       startY: event.clientY,
-      startWidth: bounds.width,
-      startHeight: bounds.height,
+      startWidth: size.width,
+      startHeight: size.height,
+      displayScale: bounds.width / size.width,
     };
+    invalidatePartition();
+    setSizeMenuOpen(false);
     setResizing(true);
   }
 
@@ -1248,13 +1592,20 @@ export default function MapPlanner({
     const activeResize = resizeState.current;
     if (!activeResize) return false;
 
-    const maxWidth = availableBoardWidth(workspaceRef.current, activeResize.startWidth);
-    const minWidth = Math.min(MIN_SIZE.width, maxWidth);
+    const displayScale = Math.max(0.01, activeResize.displayScale);
     const nextWidth = activeResize.axis.includes("x")
-      ? clamp(activeResize.startWidth + event.clientX - activeResize.startX, minWidth, maxWidth)
+      ? clamp(
+        activeResize.startWidth + (event.clientX - activeResize.startX) / displayScale,
+        MIN_SIZE.width,
+        MAX_SIZE.width,
+      )
       : activeResize.startWidth;
     const nextHeight = activeResize.axis.includes("y")
-      ? clamp(activeResize.startHeight + event.clientY - activeResize.startY, MIN_SIZE.height, 760)
+      ? clamp(
+        activeResize.startHeight + (event.clientY - activeResize.startY) / displayScale,
+        MIN_SIZE.height,
+        MAX_SIZE.height,
+      )
       : activeResize.startHeight;
 
     setSize({ width: Math.round(nextWidth), height: Math.round(nextHeight) });
@@ -1380,11 +1731,19 @@ export default function MapPlanner({
     if (!widthDelta && !heightDelta) return;
 
     event.preventDefault();
-    const maxWidth = availableBoardWidth(workspaceRef.current, size.width);
+    invalidatePartition();
+    setSizeMenuOpen(false);
     setSize((current) => ({
-      width: clamp(current.width + widthDelta, Math.min(MIN_SIZE.width, maxWidth), maxWidth),
-      height: clamp(current.height + heightDelta, MIN_SIZE.height, 760),
+      width: clamp(current.width + widthDelta, MIN_SIZE.width, MAX_SIZE.width),
+      height: clamp(current.height + heightDelta, MIN_SIZE.height, MAX_SIZE.height),
     }));
+  }
+
+  function selectStandardSize(widthCm: number, heightCm: number) {
+    cancelPointerAction();
+    invalidatePartition();
+    setSize(boardSizeForPrint(widthCm, heightCm));
+    setSizeMenuOpen(false);
   }
 
   function beautifyMap() {
@@ -1400,11 +1759,49 @@ export default function MapPlanner({
       const next = { ...current };
       places.forEach((place, index) => {
         const key = String(place.id);
-        if (!next[key]) next[key] = createDefaultAdventure(place, index, locationType);
+        if (!next[key] || isLegacyRiddle(next[key].riddle)) {
+          next[key] = createDefaultAdventure(place, index, locationType);
+        }
       });
       return next;
     });
     setAdventureOpen(true);
+    setBackOpen(false);
+    requestAnimationFrame(() => {
+      document.getElementById("riddles")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function openMapBack() {
+    if (!canPartition) return;
+
+    const nextPartitionCells = partitionCells.length === totalPoints
+      ? partitionCells
+      : createPartitionCells(partitionSeeds, size);
+    if (nextPartitionCells.length !== totalPoints) {
+      setPartitionError("Не удалось восстановить части карты. Немного раздвиньте точки и повторите.");
+      return;
+    }
+
+    setAdventures((current) => {
+      const next = { ...current };
+      places.forEach((place, index) => {
+        const key = String(place.id);
+        if (!next[key]) next[key] = createDefaultAdventure(place, index, locationType);
+      });
+      return next;
+    });
+    setPartitionCells(nextPartitionCells);
+    setPartitionSchemaVersion(PARTITION_VERSION);
+    setPartitionError(null);
+    setBackOpen(true);
+    requestAnimationFrame(() => {
+      document.getElementById("map-back")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function closeMapBack() {
+    setBackOpen(false);
     requestAnimationFrame(() => {
       document.getElementById("riddles")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -1439,8 +1836,8 @@ export default function MapPlanner({
                 setMode("points");
               }}
             >
-              <span aria-hidden="true">●</span>
-              Точки
+              <span aria-hidden="true">1</span>
+              Расставить точки
             </button>
             <button
               className={mode === "lines" ? "active" : ""}
@@ -1451,8 +1848,8 @@ export default function MapPlanner({
                 setMode("lines");
               }}
             >
-              <span aria-hidden="true">╱</span>
-              Линии
+              <span aria-hidden="true">2</span>
+              Нарисовать стены
             </button>
             <button
               className={mode === "route" ? "active" : ""}
@@ -1463,8 +1860,20 @@ export default function MapPlanner({
                 setMode("route");
               }}
             >
-              <span aria-hidden="true">⌁</span>
-              Маршрут
+              <span aria-hidden="true">3</span>
+              Начертить маршрут
+            </button>
+            <button
+              className={mode === "split" ? "active" : ""}
+              type="button"
+              aria-pressed={mode === "split"}
+              aria-label="Разбить на части"
+              title="Разбить на части"
+              disabled={!canPartition}
+              onClick={buildPartition}
+            >
+              <span aria-hidden="true">4</span>
+              Разбить на части
             </button>
           </div>
           {mode === "route" ? (
@@ -1491,18 +1900,71 @@ export default function MapPlanner({
             <span aria-hidden="true">✦</span>
             Выровнять и стилизовать
           </button>
-          <span className="line-count" aria-live="polite">{lineCountLabel}</span>
+          <div className="standard-size-picker">
+            <button
+              className={`standard-size-trigger${sizeMenuOpen ? " active" : ""}`}
+              type="button"
+              aria-label="Выбрать стандартный размер"
+              aria-expanded={sizeMenuOpen}
+              aria-haspopup="menu"
+              onClick={() => setSizeMenuOpen((current) => !current)}
+            >
+              <span aria-hidden="true">▱</span>
+              Выбрать стандартный размер
+              {selectedStandardSize ? <small>{selectedStandardSize.label}</small> : null}
+            </button>
+            {sizeMenuOpen ? (
+              <div className="standard-size-menu" role="menu" aria-label="Стандартные размеры листа">
+                {STANDARD_PRINT_SIZES.map((format) => {
+                  const selected = selectedStandardSize?.id === format.id;
+                  return (
+                    <button
+                      className={selected ? "selected" : ""}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={selected}
+                      onClick={() => selectStandardSize(format.widthCm, format.heightCm)}
+                      key={format.id}
+                    >
+                      <strong>{format.label}</strong>
+                      <span>{format.widthCm.toLocaleString("ru-RU")} × {format.heightCm.toLocaleString("ru-RU")} см</span>
+                        {selected ? <span className="standard-size-check" aria-hidden="true">✓</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+          <span className="line-count" aria-live="polite">{toolbarStatusLabel}</span>
           <button
             className="undo-line"
             type="button"
-            aria-label={mode === "route" ? "Отменить последний участок маршрута" : "Отменить последнюю линию"}
-            title={mode === "route" ? "Отменить последний участок маршрута" : "Отменить последнюю линию"}
-            disabled={mode === "route" ? manualRoutes === null : lines.length === 0}
+            aria-label={mode === "route"
+              ? "Отменить последний участок маршрута"
+              : mode === "split"
+                ? "Удалить разбиение"
+                : "Отменить последнюю линию"}
+            title={mode === "route"
+              ? "Отменить последний участок маршрута"
+              : mode === "split"
+                ? "Удалить разбиение"
+                : "Отменить последнюю линию"}
+            disabled={mode === "route"
+              ? manualRoutes === null
+              : mode === "split"
+                ? partitionCells.length === 0
+                : lines.length === 0}
             onClick={() => {
               if (mode === "route") {
                 setManualRoutes((current) => (
                   current && current.length > 1 ? current.slice(0, -1) : null
                 ));
+                return;
+              }
+              if (mode === "split") {
+                setPartitionCells([]);
+                setPartitionSchemaVersion(0);
+                setPartitionError(null);
                 return;
               }
               setLines((current) => current.slice(0, -1));
@@ -1514,8 +1976,13 @@ export default function MapPlanner({
 
         <div
           className={`map-board mode-${mode}${resizing ? " resizing" : ""}${adventureOpen ? " adventure-open" : ""}`}
+          id="map-front-export"
           ref={boardRef}
-          style={{ width: `${size.width}px`, height: `${size.height}px` }}
+          style={{
+            width: `min(${size.width}px, 100%)`,
+            height: "auto",
+            aspectRatio: `${size.width} / ${size.height}`,
+          }}
           onPointerDown={startMapDrawing}
           onPointerMove={handlePointerMove}
           onPointerUp={finishPointerAction}
@@ -1547,7 +2014,7 @@ export default function MapPlanner({
                 ))}
               </g>
             </g>
-            {(adventureOpen || mode === "route")
+            {(adventureOpen || mode === "route" || mode === "split")
               && !(draftRoute && manualRoutes === null) ? (
                 <g className="map-routes">
                   {routeLayouts.map((routeLayout, routeIndex) => (
@@ -1573,10 +2040,15 @@ export default function MapPlanner({
                               transform={`translate(${footprint.x.toFixed(1)} ${footprint.y.toFixed(1)}) rotate(${footprint.angle.toFixed(1)}) scale(1 ${footprint.side})`}
                               key={index}
                             >
-                              <ellipse className="footprint-sole" cx="-0.8" cy="0" rx="4.8" ry="2.35" />
-                              <circle className="footprint-toe" cx="4.6" cy="-1.85" r="1.25" />
-                              <circle className="footprint-toe" cx="5.35" cy="-0.25" r="1.1" />
-                              <circle className="footprint-toe" cx="5.15" cy="1.25" r="0.9" />
+                              <path
+                                className="footprint-heel"
+                                d="M -8 -2.5 C -6.5 -3.3 -3.8 -3.2 -2.4 -2.3 L -2.4 2.3 C -4 3.2 -6.7 3.3 -8 2.3 C -8.8 1.1 -8.8 -1.2 -8 -2.5 Z"
+                              />
+                              <path
+                                className="footprint-sole"
+                                d="M -0.5 -2.4 C 1.9 -4 6 -3.7 8 -1.7 C 9.3 -0.4 9.1 1.7 7.5 2.8 C 5.2 4.2 1.4 3.7 -0.6 2.1 C -1.5 1.1 -1.5 -1.3 -0.5 -2.4 Z"
+                              />
+                              <path className="footprint-tread" d="M 1.4 -2.8 L 0.8 2.7 M 4.2 -3.1 L 3.8 3.2 M 6.7 -2.5 L 6.4 2.6" />
                             </g>
                           ))
                           : null}
@@ -1596,6 +2068,46 @@ export default function MapPlanner({
                   ))}
                 </g>
               ) : null}
+            {(mode === "split" || exportPreview) && partitionCells.length ? (
+              <g className="map-cut-layer">
+                <g className="map-cut-cells">
+                  {partitionCells.map((cell, index) => {
+                    const path = partitionCellPath(cell, size);
+                    return path ? (
+                      <path
+                        className={index % 2 === 0 ? "even" : "odd"}
+                        d={path}
+                        key={cell.id}
+                      />
+                    ) : null;
+                  })}
+                </g>
+                <g className="map-cut-segments">
+                  {cutSegments.map((segment) => {
+                    const start = toPixels(segment.start, size);
+                    const end = toPixels(segment.end, size);
+                    return (
+                      <g key={segment.id}>
+                        <line
+                          className="map-cut-line-under"
+                          x1={start.x}
+                          y1={start.y}
+                          x2={end.x}
+                          y2={end.y}
+                        />
+                        <line
+                          className="map-cut-line"
+                          x1={start.x}
+                          y1={start.y}
+                          x2={end.x}
+                          y2={end.y}
+                        />
+                      </g>
+                    );
+                  })}
+                </g>
+              </g>
+            ) : null}
             {draftRoute?.length ? (
               <path
                 className="draft-route"
@@ -1612,8 +2124,16 @@ export default function MapPlanner({
               />
             ) : null}
           </svg>
+          {mode === "split" && partitionError ? (
+            <p className="partition-error" role="alert">{partitionError}</p>
+          ) : null}
           <div className="map-size" aria-hidden="true">
-            {Math.round(size.width)} × {Math.round(size.height)}
+            <span>{Math.round(size.width)} × {Math.round(size.height)}</span>
+            <strong>
+              {printMetrics.widthCm.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}
+              {" × "}
+              {printMetrics.heightCm.toLocaleString("ru-RU", { maximumFractionDigits: 1 })} см
+            </strong>
           </div>
 
           <button
@@ -1649,8 +2169,10 @@ export default function MapPlanner({
           </button>
 
           {places.map((place, index) => {
-            const position = positions[String(place.id)];
-            const adventure = adventures[String(place.id)];
+            const isFinalPlace = place.id === finalPlace?.id;
+            const position = isFinalPlace ? finalPosition : positions[String(place.id)];
+            const adventure = adventures[String(place.id)]
+              ?? (isFinalPlace ? createDefaultAdventure(place, index, locationType) : undefined);
             const marker = adventure
               ? markerCatalog.find((option) => option.id === adventure.marker)
               : null;
@@ -1658,7 +2180,7 @@ export default function MapPlanner({
             const pointStyle: CSSProperties = position
               ? { left: `${position.x}%`, top: `${position.y}%`, ...markerScale } as CSSProperties
               : {
-                "--pile-offset": `${49 + index * 7}px`,
+                "--pile-offset": `${isFinalPlace ? 80 + index * 7 : 49 + index * 7}px`,
                 "--pile-angle": `${(index - 1) * 4}deg`,
                 "--pile-z": 18 - index,
                 ...markerScale,
@@ -1667,17 +2189,34 @@ export default function MapPlanner({
 
             return (
               <button
-                className={`map-point${marker ? ` marker-${marker.id} customized` : ""}${position ? " placed" : " piled"}${draggingId === place.id ? " dragging" : ""}`}
+                className={`map-point${marker ? ` marker-${marker.id} customized` : ""}${isFinalPlace ? " final-monster final-composite" : ""}${position ? " placed" : " piled"}${draggingId === place.id ? " dragging" : ""}`}
                 type="button"
                 style={pointStyle}
-                aria-label={name}
-                title={name}
+                aria-label={isFinalPlace ? `Финальная цель: ${name}` : name}
+                title={isFinalPlace ? `Финальная цель: ${name}` : name}
                 tabIndex={mode === "points" ? 0 : -1}
                 onPointerDown={(event) => startPointDrag(event, place.id)}
                 onKeyDown={(event) => movePointWithKeyboard(event, place.id)}
                 key={place.id}
               >
-                {marker
+                {isFinalPlace && marker
+                  ? (
+                    <>
+                      <img
+                        className="map-final-monster-image"
+                        src={marker.image}
+                        alt=""
+                        draggable={false}
+                      />
+                      <img
+                        className="map-final-treasure-image"
+                        src="/treasure-chest-map.png"
+                        alt=""
+                        draggable={false}
+                      />
+                    </>
+                  )
+                  : marker
                   ? (
                     <img className="map-monster-image" src={marker.image} alt="" draggable={false} />
                   )
@@ -1696,30 +2235,6 @@ export default function MapPlanner({
               </button>
             );
           })}
-
-          <button
-            className={`map-point map-treasure-point${positions.treasure ? " placed" : " piled"}${draggingId === "treasure" ? " dragging" : ""}`}
-            type="button"
-            style={positions.treasure
-              ? { left: `${positions.treasure.x}%`, top: `${positions.treasure.y}%` }
-              : {
-                "--pile-offset": `${56 + places.length * 7}px`,
-                "--pile-angle": "7deg",
-                "--pile-z": 16 - places.length,
-              } as CSSProperties}
-            aria-label="Клад"
-            title="Клад"
-            tabIndex={mode === "points" ? 0 : -1}
-            onPointerDown={(event) => startPointDrag(event, "treasure")}
-            onKeyDown={(event) => movePointWithKeyboard(event, "treasure")}
-          >
-            <img
-              className="map-treasure-image"
-              src="/treasure-chest-map.png"
-              alt=""
-              draggable={false}
-            />
-          </button>
 
           <button
             className="resize-edge resize-edge-right"
@@ -1761,6 +2276,18 @@ export default function MapPlanner({
           places={places}
           adventures={adventures}
           onChange={setAdventures}
+          onDistribute={openMapBack}
+          canDistribute={canPartition}
+        />
+      ) : null}
+      {adventureOpen && backOpen ? (
+        <MapBackDesigner
+          size={size}
+          fragments={partitionCells}
+          adventures={adventures}
+          seekerName={seekerName}
+          onBack={closeMapBack}
+          onExportStateChange={setExportPreview}
         />
       ) : null}
     </>

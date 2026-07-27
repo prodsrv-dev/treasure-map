@@ -32,6 +32,18 @@ const genericMonsters: Array<Pick<AdventureEntry, "marker" | "monster">> = [
   { marker: "fangs", monster: "Клавишный Пожиратель" },
 ];
 
+const legacyRiddleFragments = [
+  "В части лабиринта",
+  "В одной из комнат лабиринта",
+  "Там, где подходит примета",
+  "В одном из дальних уголков",
+  "В обычном мире он притворяется предметом",
+];
+
+export function isLegacyRiddle(riddle: string) {
+  return legacyRiddleFragments.some((fragment) => riddle.includes(fragment));
+}
+
 function placeDetails(place: RiddlePlace, locationType: LocationType) {
   if (locationType === "apartment") {
     return { object: place.second.trim(), location: place.first.trim() };
@@ -45,21 +57,17 @@ export function createDefaultAdventure(
   index: number,
   locationType: LocationType,
 ): AdventureEntry {
-  const { object, location } = placeDetails(place, locationType);
+  const { object } = placeDetails(place, locationType);
   const normalized = object.toLocaleLowerCase("ru-RU");
-  const placePhrase = locationType === "apartment"
-    ? location
-      ? `В части лабиринта «${location}»`
-      : "В одной из комнат лабиринта"
-    : location
-      ? `Там, где подходит примета «${location}»`
-      : "В одном из дальних уголков";
 
   if (normalized.includes("кран") || normalized.includes("смесител")) {
     return {
       marker: "faucet",
       monster: "Латунный Длиннонос",
-      riddle: `${placePhrase} караулит Латунный Длиннонос. Два круглых глаза-крутилки смотрят в разные стороны: один сердится холодом, другой пышет жаром. Между ними торчит длинный нос, из которого по команде льётся вода. Найди этого водяного стража и загляни рядом с ним.`,
+      riddle: `Два круглых глаза: то холод, то жар,
+А нос между ними — латунный кинжал.
+Повернешь ему глаз — побежит водопад.
+Найди, где таится водяной пират.`,
     };
   }
 
@@ -67,7 +75,10 @@ export function createDefaultAdventure(
     return {
       marker: "steam",
       monster: "Паровой Ревун",
-      riddle: `${placePhrase} притаился Паровой Ревун. Под треснувшей крышкой у него прячется пасть, в железном брюхе бурлит вода, а из длинного носа вырывается обжигающий пар. Найди чудовище до того, как оно снова заревёт.`,
+      riddle: `В железном брюхе вскипает вода,
+Из носа взлетает седая гряда.
+Он крышкой гремит, раздувая бока —
+Найди, где Ревун выпускает облака.`,
     };
   }
 
@@ -75,7 +86,10 @@ export function createDefaultAdventure(
     return {
       marker: "tentacles",
       monster: "Щупальчатый Ловец",
-      riddle: `${placePhrase} раскинулось костлявое чудище из металлических лап. Оно цепляет добычу длинными крюками и держит её, пока та не высохнет. Найди логово Щупальчатого Ловца.`,
+      riddle: `Раскинул он лапы, костляв и высок,
+На каждой добыче оставил крючок.
+Он мокрых пленников держит весь день,
+Пока не иссушит последнюю тень.`,
     };
   }
 
@@ -83,7 +97,10 @@ export function createDefaultAdventure(
     return {
       marker: "eye",
       monster: "Ледяной Наблюдатель",
-      riddle: `${placePhrase} не мигает Ледяной Наблюдатель. За толстой дверью у него морозное брюхо, в котором бесследно исчезает еда. Отыщи холодного стража и загляни рядом с ним.`,
+      riddle: `За толстой дверью он прячет мороз
+И пищу крадет у беспечных матрос.
+В холодном животе не теплеет рассвет —
+Найди Наблюдателя, что стережет обед.`,
     };
   }
 
@@ -91,7 +108,10 @@ export function createDefaultAdventure(
     return {
       marker: "tentacles",
       monster: "Шкафной Ловец",
-      riddle: `${placePhrase} притаился Шкафной Ловец. Он распахивает тёмную пасть, хватает одежду длинными лапами и прячет добычу внутри. Найди место, где он хранит свой плен.`,
+      riddle: `Раскроются створки — разинется пасть,
+Одежда бесследно уходит во власть.
+Он куртки и платья уводит в свой плен —
+Найди, где Ловец притаился у стен.`,
     };
   }
 
@@ -99,7 +119,10 @@ export function createDefaultAdventure(
     return {
       marker: "steam",
       monster: "Горячий Ветрокрик",
-      riddle: `${placePhrase} скрывается Горячий Ветрокрик. Стоит его разбудить, как он начинает реветь и выдыхать сильный тёплый ветер. Найди его, пока он снова не уснул.`,
+      riddle: `Проснется — завоет, как ветер в трубе,
+Горячее дыханье направит к тебе.
+В ладони скрывается яростный крик —
+Найди, где уснул огневой Ветрокрик.`,
     };
   }
 
@@ -107,7 +130,10 @@ export function createDefaultAdventure(
     return {
       marker: "eye",
       monster: "Глубинный Глаз",
-      riddle: `${placePhrase} мерцает прозрачное логово Глубинного Глаза. За стеклом колышется вода, а его маленькие слуги бесшумно плавают кругами. Ищи подсказку у водяного чудища.`,
+      riddle: `За стеклянной стеной колыхается свет,
+Безмолвные слуги танцуют балет.
+Из темной воды наблюдает глазок —
+Найди, где он прячет заветный клочок.`,
     };
   }
 
@@ -115,14 +141,20 @@ export function createDefaultAdventure(
     return {
       marker: "fangs",
       monster: "Клавишный Пожиратель",
-      riddle: `${placePhrase} скалит белые и чёрные зубы Клавишный Пожиратель. Стоит прикоснуться к его пасти, как старое дерево начинает стонать разными голосами. Разыщи чудовище и проверь тайник.`,
+      riddle: `Белые, черные зубы подряд,
+Коснись — и они то поют, то рычат.
+Внутри деревянного брюха струна —
+Найди Пожирателя: песня слышна.`,
     };
   }
 
   const generic = genericMonsters[index % genericMonsters.length];
   return {
     ...generic,
-    riddle: `${placePhrase} сторожит путь ${generic.monster}. В обычном мире он притворяется предметом «${object || "безымянный предмет"}», но в лабиринте оживает. Найди его по этому облику и забери спрятанную рядом подсказку.`,
+    riddle: `Под видом привычной вещи он спит,
+Но ночью оскалится и зашуршит.
+Присмотрись к силуэту, найди тайный след —
+Там страж притаился и спрятал секрет.`,
   };
 }
 
@@ -131,11 +163,15 @@ export default function RiddleDesigner({
   places,
   adventures,
   onChange,
+  onDistribute,
+  canDistribute,
 }: {
   locationType: LocationType;
   places: RiddlePlace[];
   adventures: Record<string, AdventureEntry>;
   onChange: (next: Record<string, AdventureEntry>) => void;
+  onDistribute: () => void;
+  canDistribute: boolean;
 }) {
   const themeTitle = locationType === "apartment"
     ? "Лабиринт, полный чудовищ"
@@ -229,6 +265,20 @@ export default function RiddleDesigner({
             </article>
           );
         })}
+      </div>
+      <div className="riddle-actions">
+        <button
+          className="distribute-riddles"
+          type="button"
+          disabled={!canDistribute}
+          onClick={onDistribute}
+        >
+          Распределить загадки на обратной стороне карты
+          <span aria-hidden="true">→</span>
+        </button>
+        {!canDistribute ? (
+          <p>Сначала расставьте точки и разбейте карту на части.</p>
+        ) : null}
       </div>
     </section>
   );

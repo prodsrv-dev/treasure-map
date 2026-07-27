@@ -14,6 +14,7 @@ type PlaceItem = {
 
 type LocationDraft = {
   locationType: LocationType | null;
+  seekerName: string;
   places: PlaceItem[];
   drafts: Partial<Record<LocationType, PlaceItem[]>>;
   confirmed: boolean;
@@ -108,6 +109,7 @@ function restoreDraft(value: string | null): LocationDraft | null {
       locationType?: unknown;
       places?: unknown;
       drafts?: Partial<Record<LocationType, unknown>>;
+      seekerName?: unknown;
       confirmed?: unknown;
     };
     const validLocation = draft.locationType === "apartment"
@@ -127,10 +129,13 @@ function restoreDraft(value: string | null): LocationDraft | null {
     if (!drafts[locationType] && legacyPlaces) drafts[locationType] = legacyPlaces;
 
     const places = drafts[locationType] ?? blankPlaces();
+    const seekerName = typeof draft.seekerName === "string"
+      ? draft.seekerName.slice(0, 40)
+      : "";
     const confirmed = draft.confirmed === true
       && places.filter((place) => place.first.trim() && place.second.trim()).length >= 3;
 
-    return { locationType, places, drafts, confirmed };
+    return { locationType, seekerName, places, drafts, confirmed };
   } catch {
     return null;
   }
@@ -138,6 +143,7 @@ function restoreDraft(value: string | null): LocationDraft | null {
 
 export default function LocationSetup() {
   const [locationType, setLocationType] = useState<LocationType | null>(null);
+  const [seekerName, setSeekerName] = useState("");
   const [places, setPlaces] = useState<PlaceItem[]>(blankPlaces);
   const [confirmed, setConfirmed] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
@@ -180,9 +186,24 @@ export default function LocationSetup() {
     }
 
     if (draft) {
+      let restoredSeekerName = draft.seekerName;
+      if (!restoredSeekerName) {
+        try {
+          const legacyMap = JSON.parse(
+            window.localStorage.getItem(`treasure-map:layout:${draft.locationType}:v1`) || "null",
+          ) as { seekerName?: unknown } | null;
+          if (typeof legacyMap?.seekerName === "string") {
+            restoredSeekerName = legacyMap.seekerName.slice(0, 40);
+          }
+        } catch {
+          // Ignore malformed legacy map data.
+        }
+      }
+
       setLocationType(draft.locationType);
+      setSeekerName(restoredSeekerName);
       setPlaces(draft.places);
-      setConfirmed(draft.confirmed);
+      setConfirmed(draft.confirmed && Boolean(restoredSeekerName.trim()));
       locationDrafts.current = draft.drafts;
       nextId.current = Math.max(0, ...draft.places.map((place) => place.id)) + 1;
     }
@@ -216,19 +237,21 @@ export default function LocationSetup() {
       if (locationType) locationDrafts.current[locationType] = places;
       window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
         locationType,
+        seekerName,
         drafts: locationDrafts.current,
         confirmed,
       }));
     } catch {
       // Storage can be disabled by browser privacy settings.
     }
-  }, [confirmed, draftRestored, locationType, places]);
+  }, [confirmed, draftRestored, locationType, places, seekerName]);
 
   const completedCount = useMemo(
     () => places.filter((place) => place.first.trim() && place.second.trim()).length,
     [places],
   );
-  const canContinue = completedCount >= 3;
+  const hasMinimumPlaces = completedCount >= 3;
+  const canContinue = hasMinimumPlaces && Boolean(seekerName.trim());
   const completedPlaces = useMemo(
     () => places.filter((place) => place.first.trim() && place.second.trim()),
     [places],
@@ -245,7 +268,7 @@ export default function LocationSetup() {
     }
     setLocationType(nextLocation);
     requestAnimationFrame(() => {
-      document.getElementById("places")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("seeker-name")?.focus();
     });
   }
 
@@ -292,18 +315,36 @@ export default function LocationSetup() {
             <h2 id="start-title">Где проводим приключение?</h2>
           </div>
         </div>
-        <div className="place-options" aria-label="Выберите место приключения">
-          {locationOptions.map((option) => (
-            <button
-              className={locationType === option.value ? "active" : ""}
-              type="button"
-              aria-pressed={locationType === option.value}
-              onClick={() => selectLocation(option.value)}
-              key={option.value}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="start-setup">
+          <div className="place-options" aria-label="Выберите место приключения">
+            {locationOptions.map((option) => (
+              <button
+                className={locationType === option.value ? "active" : ""}
+                type="button"
+                aria-pressed={locationType === option.value}
+                onClick={() => selectLocation(option.value)}
+                key={option.value}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {locationType ? (
+            <label className="seeker-prompt" htmlFor="seeker-name">
+              <span>Персональная легенда</span>
+              <strong>Как зовут искателя?</strong>
+              <input
+                id="seeker-name"
+                type="text"
+                value={seekerName}
+                maxLength={40}
+                autoComplete="name"
+                placeholder="Например, Миша"
+                onChange={(event) => setSeekerName(event.target.value)}
+              />
+              <small>Это имя появится в легенде и поздравлении на осколках карты.</small>
+            </label>
+          ) : null}
         </div>
       </section>
 
@@ -361,8 +402,8 @@ export default function LocationSetup() {
 
             <div className="places-footer">
               <div className="places-progress" aria-live="polite">
-                <strong>{canContinue ? `${completedCount} мест` : `${completedCount} из 3`}</strong>
-                <span>{canContinue ? "Минимум собран" : "Минимум для маршрута"}</span>
+                <strong>{hasMinimumPlaces ? `${completedCount} мест` : `${completedCount} из 3`}</strong>
+                <span>{hasMinimumPlaces ? "Минимум собран" : "Минимум для маршрута"}</span>
               </div>
               <button className="add-place" type="button" onClick={addPlace}>
                 <span aria-hidden="true">+</span>
@@ -378,7 +419,11 @@ export default function LocationSetup() {
                 <span aria-hidden="true">→</span>
               </button>
             </div>
-            <p className="places-limit">Добавляйте столько мест, сколько нужно.</p>
+            <p className="places-limit">
+              {seekerName.trim()
+                ? "Добавляйте столько мест, сколько нужно."
+                : "Чтобы продолжить, укажите имя искателя выше."}
+            </p>
           </div>
         </section>
       ) : null}
@@ -387,6 +432,7 @@ export default function LocationSetup() {
         <MapPlanner
           locationType={locationType}
           places={completedPlaces}
+          seekerName={seekerName.trim()}
           key={locationType}
         />
       ) : null}
