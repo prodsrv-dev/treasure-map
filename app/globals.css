@@ -564,16 +564,18 @@ h2 {
 .map-toolbar {
   width: min(920px, 100%);
   min-height: 48px;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content 46px;
   align-items: center;
   align-self: center;
-  gap: 12px;
+  gap: 8px 12px;
   color: white;
 }
 
 .map-mode-switch {
   width: 100%;
+  grid-column: 1 / -1;
+  grid-row: 2;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   border: 1px solid rgba(255, 255, 255, 0.34);
@@ -632,6 +634,9 @@ h2 {
 
 .route-style-switch {
   min-height: 46px;
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: start;
   display: inline-flex;
   border: 1px solid rgba(255, 255, 255, 0.34);
 }
@@ -668,7 +673,9 @@ h2 {
 }
 
 .line-count {
-  margin-left: auto;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
   color: rgba(255, 255, 255, 0.7);
   font-size: 12px;
 }
@@ -676,6 +683,8 @@ h2 {
 .standard-size-picker {
   position: relative;
   z-index: 60;
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .standard-size-trigger {
@@ -775,6 +784,8 @@ h2 {
 .undo-line {
   width: 46px;
   height: 46px;
+  grid-column: 4;
+  grid-row: 1;
   display: grid;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.34);
@@ -2003,6 +2014,12 @@ h2 {
 
   .map-toolbar {
     width: 100%;
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .map-mode-switch {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .map-mode-switch button {
@@ -2012,7 +2029,8 @@ h2 {
 
   .route-style-switch {
     width: 100%;
-    order: 2;
+    grid-column: 1 / -1;
+    grid-row: 3;
   }
 
   .route-style-switch button {
@@ -2027,13 +2045,15 @@ h2 {
   .undo-line {
     width: 44px;
     height: 44px;
-    margin-left: auto;
-    order: 4;
+    grid-column: 2;
+    grid-row: 1;
+    margin-left: 0;
   }
 
   .standard-size-picker {
     width: 100%;
-    order: 4;
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .standard-size-trigger {
@@ -2049,10 +2069,6 @@ h2 {
     width: 100%;
     right: auto;
     left: 0;
-  }
-
-  .undo-line {
-    order: 5;
   }
 
   .map-next-button {
