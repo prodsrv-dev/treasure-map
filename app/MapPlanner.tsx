@@ -1884,7 +1884,7 @@ export default function MapPlanner({
               disabled={lines.length === 0}
               onClick={beautifyMap}
             >
-              <span aria-hidden="true">{styled ? "4 ✓" : "4"}</span>
+              <span aria-hidden="true">4</span>
               Выровнять и стилизовать
             </button>
             <button

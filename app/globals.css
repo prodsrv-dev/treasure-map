@@ -608,9 +608,17 @@ h2 {
 }
 
 .map-mode-switch button.complete {
-  background: rgba(241, 162, 143, 0.18);
+  background: transparent;
   box-shadow: inset 0 -3px 0 #f1a28f;
   color: white;
+}
+
+.map-mode-switch button.complete > span:first-child::after {
+  content: "✓";
+  margin-left: 4px;
+  color: #f1a28f;
+  font-size: 12px;
+  vertical-align: 2px;
 }
 
 .map-mode-switch button:not(:disabled):not(.active):hover,
@@ -633,6 +641,7 @@ h2 {
 .map-mode-switch button span {
   font-size: 18px;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .route-style-switch {
