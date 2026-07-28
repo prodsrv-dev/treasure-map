@@ -58,7 +58,7 @@ type PointId = number | "start";
 const FINAL_COMPOSITE_BOTTOM_GUARD = 110;
 const MIN_PARTITION_SEED_DISTANCE = 42;
 const PARTITION_VERSION = 4;
-type DrawingMode = "points" | "lines" | "route" | "split";
+type DrawingMode = "points" | "lines" | "route" | "style" | "split";
 type RouteStyle = "plain" | "arrows" | "footprints";
 
 type LineSegment = {
@@ -1757,6 +1757,7 @@ export default function MapPlanner({
     if (!boardRef.current || !lines.length) return;
 
     cancelPointerAction();
+    setMode("style");
     const bounds = boardRef.current.getBoundingClientRect();
     setLines((current) => beautifyLines(current, bounds));
     setStyled(true);
@@ -1872,9 +1873,9 @@ export default function MapPlanner({
               Начертить маршрут
             </button>
             <button
-              className={styled ? "complete" : ""}
+              className={mode === "style" ? "active" : ""}
               type="button"
-              aria-pressed={styled}
+              aria-pressed={mode === "style"}
               aria-label={styled
                 ? "Выровнять и стилизовать повторно"
                 : "Выровнять и стилизовать"}
