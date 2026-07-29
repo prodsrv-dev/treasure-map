@@ -11,6 +11,13 @@ import {
 } from "react";
 import MapBackDesigner from "./MapBackDesigner";
 import { boardSizeForPrint, getPrintMetrics } from "./mapExport";
+import OutdoorMapLayer, {
+  OutdoorFeature,
+  OutdoorMapState,
+  createEmptyOutdoorMap,
+  fetchOutdoorFeatures,
+  geocodeOutdoorAddress,
+} from "./OutdoorMapLayer";
 import RiddleDesigner, {
   AdventureEntry,
   MarkerKind,
@@ -51,6 +58,7 @@ type StoredMap = {
   backOpen?: boolean;
   seekerName: string;
   adventures: Record<string, AdventureEntry>;
+  outdoorMap?: OutdoorMapState;
 };
 
 type ResizeAxis = "x" | "y" | "xy";
@@ -126,6 +134,17 @@ const routeStyleOptions: Array<{ id: RouteStyle; label: string }> = [
 
 function storageKey(locationType: LocationType) {
   return `treasure-map:layout:${locationType}:v1`;
+}
+
+function outdoorFeaturePath(feature: OutdoorFeature, size: BoardSize) {
+  if (feature.points.length < 2) return "";
+
+  const commands = feature.points.map((point, index) => {
+    const pixel = toPixels(point, size);
+    return `${index === 0 ? "M" : "L"} ${pixel.x.toFixed(1)} ${pixel.y.toFixed(1)}`;
+  });
+  if (feature.closed) commands.push("Z");
+  return commands.join(" ");
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -1039,6 +1058,67 @@ function beautifyLines(lines: LineSegment[], bounds: DOMRect) {
   });
 }
 
+function restoreOutdoorMap(value: unknown): OutdoorMapState | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const stored = value as Partial<OutdoorMapState>;
+  if (
+    !stored.center
+    || !Number.isFinite(stored.center.lat)
+    || !Number.isFinite(stored.center.lng)
+    || !Number.isFinite(stored.zoom)
+  ) return undefined;
+
+  const bounds = stored.bounds
+    && Number.isFinite(stored.bounds.south)
+    && Number.isFinite(stored.bounds.west)
+    && Number.isFinite(stored.bounds.north)
+    && Number.isFinite(stored.bounds.east)
+    ? {
+      south: stored.bounds.south,
+      west: stored.bounds.west,
+      north: stored.bounds.north,
+      east: stored.bounds.east,
+    }
+    : null;
+  const validKinds = new Set(["building", "road", "path", "fence", "water", "green"]);
+  const features = Array.isArray(stored.features)
+    ? stored.features.flatMap((feature) => {
+      if (
+        !feature
+        || typeof feature.id !== "string"
+        || !validKinds.has(feature.kind)
+        || !Array.isArray(feature.points)
+      ) return [];
+
+      const points = feature.points.flatMap((point) => (
+        point && Number.isFinite(point.x) && Number.isFinite(point.y)
+          ? [{ x: clamp(point.x, 0, 100), y: clamp(point.y, 0, 100) }]
+          : []
+      ));
+      return points.length >= 2
+        ? [{
+          id: feature.id,
+          kind: feature.kind,
+          points,
+          closed: feature.closed === true,
+        } as OutdoorFeature]
+        : [];
+    })
+    : [];
+
+  return {
+    address: typeof stored.address === "string" ? stored.address.slice(0, 240) : "",
+    center: {
+      lat: clamp(stored.center.lat, -85, 85),
+      lng: clamp(stored.center.lng, -180, 180),
+    },
+    zoom: clamp(Math.round(stored.zoom), 3, 20),
+    bounds,
+    locked: stored.locked === true && Boolean(bounds),
+    features,
+  };
+}
+
 function restoreMap(value: string | null): StoredMap | null {
   if (!value) return null;
 
@@ -1177,6 +1257,7 @@ function restoreMap(value: string | null): StoredMap | null {
         ? stored.seekerName.slice(0, 40)
         : "",
       adventures,
+      outdoorMap: restoreOutdoorMap(stored.outdoorMap),
     };
   } catch {
     return null;
@@ -1192,6 +1273,7 @@ export default function MapPlanner({
   places: MapPlace[];
   seekerName: string;
 }) {
+  const isOutdoor = locationType !== "apartment";
   const [size, setSize] = useState<BoardSize>(DEFAULT_SIZE);
   const [positions, setPositions] = useState<Record<string, PointPosition>>({});
   const [lines, setLines] = useState<LineSegment[]>([]);
@@ -1209,6 +1291,9 @@ export default function MapPlanner({
   const [exportPreview, setExportPreview] = useState(false);
   const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
   const [adventures, setAdventures] = useState<Record<string, AdventureEntry>>({});
+  const [outdoorMap, setOutdoorMap] = useState<OutdoorMapState>(createEmptyOutdoorMap);
+  const [outdoorMapBusy, setOutdoorMapBusy] = useState(false);
+  const [outdoorMapMessage, setOutdoorMapMessage] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [draggingId, setDraggingId] = useState<PointId | null>(null);
   const [resizing, setResizing] = useState(false);
@@ -1296,7 +1381,17 @@ export default function MapPlanner({
     : partitionCells.length > 1 && partitionCells.length < 5
       ? `${partitionCells.length} части`
       : `${partitionCells.length} частей`;
-  const toolbarStatusLabel = mode === "split" ? partitionCountLabel : lineCountLabel;
+  const outdoorContourCount = outdoorMap.features.length + lines.length;
+  const outdoorContourLabel = outdoorContourCount === 1
+    ? "1 контур"
+    : outdoorContourCount > 1 && outdoorContourCount < 5
+      ? `${outdoorContourCount} контура`
+      : `${outdoorContourCount} контуров`;
+  const toolbarStatusLabel = mode === "split"
+    ? partitionCountLabel
+    : isOutdoor
+      ? outdoorContourLabel
+      : lineCountLabel;
 
   useEffect(() => {
     let stored: StoredMap | null = null;
@@ -1372,12 +1467,14 @@ export default function MapPlanner({
         && nextPartitionCells.length === validPartitionIds.size,
       );
       setAdventures(restoredAdventures);
+      setOutdoorMap(stored.outdoorMap ?? createEmptyOutdoorMap());
       nextLineId.current = Math.max(0, ...stored.lines.map((line) => line.id)) + 1;
     } else {
       setPartitionCells([]);
       setPartitionSchemaVersion(0);
       setPartitionError(null);
       setBackOpen(false);
+      setOutdoorMap(createEmptyOutdoorMap());
     }
     setReady(true);
   }, [locationType]);
@@ -1401,6 +1498,7 @@ export default function MapPlanner({
         backOpen,
         seekerName,
         adventures,
+        outdoorMap: isOutdoor ? outdoorMap : undefined,
       }));
     } catch {
       // Storage can be disabled by browser privacy settings.
@@ -1412,6 +1510,8 @@ export default function MapPlanner({
     lines,
     locationType,
     manualRoutes,
+    isOutdoor,
+    outdoorMap,
     partitionCells,
     partitionSchemaVersion,
     positions,
@@ -1451,6 +1551,134 @@ export default function MapPlanner({
     setPartitionSchemaVersion(0);
     setPartitionError(null);
     setBackOpen(false);
+  }
+
+  function resetOutdoorWork() {
+    cancelPointerAction();
+    setPositions({});
+    setLines([]);
+    setManualRoutes(null);
+    setStyled(false);
+    setAdventureOpen(false);
+    setBackOpen(false);
+    setPartitionCells([]);
+    setPartitionSchemaVersion(0);
+    setPartitionError(null);
+    setMode("points");
+    nextLineId.current = 1;
+  }
+
+  function updateOutdoorView(
+    patch: Pick<OutdoorMapState, "center" | "zoom" | "bounds">,
+  ) {
+    setOutdoorMap((current) => (
+      current.locked ? current : { ...current, ...patch }
+    ));
+  }
+
+  async function searchOutdoorLocation() {
+    const query = outdoorMap.address.trim();
+    if (query.length < 3) {
+      setOutdoorMapMessage("Введите адрес или название места.");
+      return;
+    }
+
+    setOutdoorMapBusy(true);
+    setOutdoorMapMessage(null);
+    try {
+      const result = await geocodeOutdoorAddress(query);
+      if (!result) {
+        setOutdoorMapMessage("Место не найдено. Уточните населенный пункт или улицу.");
+        return;
+      }
+      resetOutdoorWork();
+      setOutdoorMap((current) => ({
+        ...current,
+        address: result.address,
+        center: result.center,
+        zoom: 18,
+        bounds: null,
+        locked: false,
+        features: [],
+      }));
+    } catch {
+      setOutdoorMapMessage("Не удалось связаться с OpenStreetMap. Попробуйте еще раз.");
+    } finally {
+      setOutdoorMapBusy(false);
+    }
+  }
+
+  function locateOutdoorMap() {
+    if (!navigator.geolocation) {
+      setOutdoorMapMessage("Браузер не поддерживает определение местоположения.");
+      return;
+    }
+
+    setOutdoorMapBusy(true);
+    setOutdoorMapMessage(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resetOutdoorWork();
+        setOutdoorMap((current) => ({
+          ...current,
+          address: "Мое местоположение",
+          center: {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          },
+          zoom: 18,
+          bounds: null,
+          locked: false,
+          features: [],
+        }));
+        setOutdoorMapBusy(false);
+      },
+      () => {
+        setOutdoorMapMessage("Доступ к местоположению не получен. Найдите место по адресу.");
+        setOutdoorMapBusy(false);
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
+    );
+  }
+
+  async function lockOutdoorUnderlay() {
+    if (!outdoorMap.bounds) {
+      setOutdoorMapMessage("Сначала найдите место и дождитесь загрузки карты.");
+      return;
+    }
+    if (outdoorMap.zoom < 16) {
+      setOutdoorMapMessage("Приблизьте карту: должны быть видны отдельные здания и дорожки.");
+      return;
+    }
+
+    setOutdoorMapBusy(true);
+    setOutdoorMapMessage("Собираем здания, дорожки и границы выбранного фрагмента.");
+    try {
+      const features = await fetchOutdoorFeatures(outdoorMap.bounds);
+      setOutdoorMap((current) => ({ ...current, locked: true, features }));
+      setOutdoorMapMessage(
+        features.length
+          ? `Подложка закреплена: найдено ${features.length} контуров.`
+          : "Подложка закреплена. Контуры можно уточнить вручную.",
+      );
+    } catch {
+      setOutdoorMap((current) => ({ ...current, locked: true, features: [] }));
+      setOutdoorMapMessage(
+        "Подложка закреплена без автоматических контуров. Уточните нужные границы вручную.",
+      );
+    } finally {
+      setOutdoorMapBusy(false);
+    }
+  }
+
+  function unlockOutdoorUnderlay() {
+    resetOutdoorWork();
+    setOutdoorMap((current) => ({
+      ...current,
+      locked: false,
+      features: [],
+    }));
+    setOutdoorMapMessage("Настройте фрагмент заново. Расставленные точки были сброшены.");
   }
 
   function buildPartition() {
@@ -1526,7 +1754,7 @@ export default function MapPlanner({
   }
 
   function startPointDrag(event: ReactPointerEvent<HTMLButtonElement>, id: PointId) {
-    if (mode !== "points") return;
+    if (mode !== "points" || (isOutdoor && !outdoorMap.locked)) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -1535,7 +1763,7 @@ export default function MapPlanner({
   }
 
   function movePointWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, id: PointId) {
-    if (mode !== "points") return;
+    if (mode !== "points" || (isOutdoor && !outdoorMap.locked)) return;
 
     const pointKey = String(id);
     const isFinalPoint = pointKey === finalPlaceKey;
@@ -1627,7 +1855,11 @@ export default function MapPlanner({
   }
 
   function startMapDrawing(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.button !== 0 || !boardRef.current) return;
+    if (
+      event.button !== 0
+      || !boardRef.current
+      || (isOutdoor && !outdoorMap.locked)
+    ) return;
 
     if (mode === "route") {
       event.preventDefault();
@@ -1754,12 +1986,17 @@ export default function MapPlanner({
   }
 
   function beautifyMap() {
-    if (!boardRef.current || !lines.length) return;
+    if (
+      !boardRef.current
+      || (isOutdoor ? !outdoorMap.locked : !lines.length)
+    ) return;
 
     cancelPointerAction();
     setMode("style");
-    const bounds = boardRef.current.getBoundingClientRect();
-    setLines((current) => beautifyLines(current, bounds));
+    if (lines.length) {
+      const bounds = boardRef.current.getBoundingClientRect();
+      setLines((current) => beautifyLines(current, bounds));
+    }
     setStyled(true);
   }
 
@@ -1824,46 +2061,117 @@ export default function MapPlanner({
         <div>
           <p className="eyebrow">Маршрут</p>
           <h2 id="map-layout-title">
-            Расставим точки на карте и начертим границы {boundaryLabel[locationType]}
+            {isOutdoor
+              ? `Расставим объекты по реальному плану ${boundaryLabel[locationType]}`
+              : `Расставим точки на карте и начертим границы ${boundaryLabel[locationType]}`}
           </h2>
         </div>
         <div className="map-status" aria-live="polite">
           <strong>{placedCount} из {totalPoints}</strong>
-          <span>точек расставлено</span>
+          <span>{isOutdoor ? "меток расставлено" : "точек расставлено"}</span>
         </div>
       </header>
 
       <div className="map-workspace" ref={workspaceRef}>
+        {isOutdoor ? (
+          <div className={`outdoor-map-setup${styled ? " styled" : ""}`}>
+            <div className="outdoor-map-search">
+              <label htmlFor={`outdoor-map-address-${locationType}`}>
+                <span>Место на OpenStreetMap</span>
+                <input
+                  id={`outdoor-map-address-${locationType}`}
+                  type="search"
+                  value={outdoorMap.address}
+                  placeholder="Адрес, поселок или название места"
+                  disabled={outdoorMap.locked || outdoorMapBusy || styled}
+                  onChange={(event) => setOutdoorMap((current) => ({
+                    ...current,
+                    address: event.target.value,
+                  }))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void searchOutdoorLocation();
+                    }
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={outdoorMap.locked || outdoorMapBusy || styled}
+                onClick={() => void searchOutdoorLocation()}
+              >
+                Найти
+              </button>
+              <button
+                className="outdoor-location-button"
+                type="button"
+                disabled={outdoorMap.locked || outdoorMapBusy || styled}
+                onClick={locateOutdoorMap}
+              >
+                Мое место
+              </button>
+            </div>
+            <div className="outdoor-map-actions">
+              {!outdoorMap.locked && !styled ? (
+                <button
+                  className="outdoor-lock-button"
+                  type="button"
+                  disabled={outdoorMapBusy}
+                  onClick={() => void lockOutdoorUnderlay()}
+                >
+                  {outdoorMapBusy ? "Подготавливаем…" : "Зафиксировать подложку"}
+                </button>
+              ) : (
+                <button
+                  className="outdoor-unlock-button"
+                  type="button"
+                  disabled={outdoorMapBusy}
+                  onClick={unlockOutdoorUnderlay}
+                >
+                  Изменить место
+                </button>
+              )}
+              <span className="outdoor-zoom">Масштаб {outdoorMap.zoom}</span>
+            </div>
+            {outdoorMapMessage ? (
+              <p className="outdoor-map-message" aria-live="polite">{outdoorMapMessage}</p>
+            ) : null}
+          </div>
+        ) : null}
         <div className="map-toolbar" role="toolbar" aria-label="Инструменты карты">
           <div className="map-mode-switch" role="group" aria-label="Шаги подготовки карты">
             <button
               className={mode === "points" ? "active" : ""}
               type="button"
               aria-pressed={mode === "points"}
+              disabled={isOutdoor && !outdoorMap.locked}
               onClick={() => {
                 cancelPointerAction();
                 setMode("points");
               }}
             >
               <span aria-hidden="true">1</span>
-              Расставить точки
+              {isOutdoor ? "Расставить объекты" : "Расставить точки"}
             </button>
             <button
               className={mode === "lines" ? "active" : ""}
               type="button"
               aria-pressed={mode === "lines"}
+              disabled={isOutdoor && !outdoorMap.locked}
               onClick={() => {
                 cancelPointerAction();
                 setMode("lines");
               }}
             >
               <span aria-hidden="true">2</span>
-              Нарисовать стены
+              {isOutdoor ? "Уточнить границы" : "Нарисовать стены"}
             </button>
             <button
               className={mode === "route" ? "active" : ""}
               type="button"
               aria-pressed={mode === "route"}
+              disabled={isOutdoor && !outdoorMap.locked}
               onClick={() => {
                 cancelPointerAction();
                 setMode("route");
@@ -1882,11 +2190,11 @@ export default function MapPlanner({
               title={styled
                 ? "Нажмите, чтобы повторно подравнять карту"
                 : "Подравнять линии и оформить карту"}
-              disabled={lines.length === 0}
+              disabled={isOutdoor ? !outdoorMap.locked : lines.length === 0}
               onClick={beautifyMap}
             >
               <span aria-hidden="true">4</span>
-              Выровнять и стилизовать
+              {isOutdoor ? "Стилизовать карту" : "Выровнять и стилизовать"}
             </button>
             <button
               className={mode === "split" ? "active" : ""}
@@ -1991,7 +2299,7 @@ export default function MapPlanner({
         </div>
 
         <div
-          className={`map-board mode-${mode}${resizing ? " resizing" : ""}${adventureOpen ? " adventure-open" : ""}`}
+          className={`map-board mode-${mode}${isOutdoor ? " outdoor" : ""}${resizing ? " resizing" : ""}${adventureOpen ? " adventure-open" : ""}`}
           id="map-front-export"
           ref={boardRef}
           style={{
@@ -2005,6 +2313,9 @@ export default function MapPlanner({
           onPointerCancel={cancelPointerAction}
         >
           <div className="map-board-texture" aria-hidden="true" />
+          {isOutdoor && !styled ? (
+            <OutdoorMapLayer state={outdoorMap} onViewChange={updateOutdoorView} />
+          ) : null}
           <svg
             className={`map-lines${styled ? " styled" : ""}`}
             viewBox={`0 0 ${size.width} ${size.height}`}
@@ -2016,6 +2327,20 @@ export default function MapPlanner({
                 <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.4" />
               </filter>
             </defs>
+            {isOutdoor && styled && outdoorMap.features.length ? (
+              <g className="outdoor-context">
+                {outdoorMap.features.map((feature) => {
+                  const path = outdoorFeaturePath(feature, size);
+                  return path ? (
+                    <path
+                      className={`outdoor-feature outdoor-${feature.kind}`}
+                      d={path}
+                      key={feature.id}
+                    />
+                  ) : null;
+                })}
+              </g>
+            ) : null}
             <g className="map-walls">
               {styled ? (
                 <g className="map-walls-wash" transform="translate(1.6 2.2)">
@@ -2151,6 +2476,16 @@ export default function MapPlanner({
               {printMetrics.heightCm.toLocaleString("ru-RU", { maximumFractionDigits: 1 })} см
             </strong>
           </div>
+          {isOutdoor && styled ? (
+            <a
+              className="map-data-credit"
+              href="https://www.openstreetmap.org/copyright"
+              target="_blank"
+              rel="noreferrer"
+            >
+              © OpenStreetMap contributors
+            </a>
+          ) : null}
 
           <button
             className={`map-point map-start-point${positions.start ? " placed" : " piled"}${draggingId === "start" ? " dragging" : ""}`}

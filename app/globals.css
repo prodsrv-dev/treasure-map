@@ -561,6 +561,119 @@ h2 {
   border-top: 1px solid rgba(255, 255, 255, 0.18);
 }
 
+.outdoor-map-setup {
+  width: min(920px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 8px 16px;
+  align-items: end;
+  color: white;
+}
+
+.outdoor-map-search {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) max-content max-content;
+}
+
+.outdoor-map-search label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.outdoor-map-search label > span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.outdoor-map-search input {
+  min-width: 0;
+  height: 46px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-right: 0;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  font: inherit;
+  padding: 0 14px;
+}
+
+.outdoor-map-search input::placeholder {
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.outdoor-map-search input:focus {
+  background: rgba(255, 255, 255, 0.13);
+  outline: 2px solid rgba(241, 162, 143, 0.7);
+  outline-offset: -2px;
+}
+
+.outdoor-map-search button,
+.outdoor-map-actions button {
+  min-height: 46px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 0;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 16px;
+}
+
+.outdoor-map-search button + button {
+  border-left: 0;
+}
+
+.outdoor-map-search button:not(:disabled):hover,
+.outdoor-map-search button:not(:disabled):focus-visible,
+.outdoor-map-actions button:not(:disabled):hover,
+.outdoor-map-actions button:not(:disabled):focus-visible {
+  background: #f7f3ea;
+  color: var(--green);
+  outline: none;
+}
+
+.outdoor-map-search button:disabled,
+.outdoor-map-actions button:disabled,
+.outdoor-map-search input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.outdoor-map-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.outdoor-map-actions .outdoor-lock-button {
+  border-color: #f1a28f;
+  background: #d34834;
+}
+
+.outdoor-map-actions .outdoor-unlock-button {
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.outdoor-zoom {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.outdoor-map-message {
+  grid-column: 1 / -1;
+  min-height: 16px;
+  margin: 0;
+  color: #f3cabf;
+  font-size: 11px;
+}
+
 .map-toolbar {
   width: min(920px, 100%);
   min-height: 48px;
@@ -839,6 +952,34 @@ h2 {
   pointer-events: none;
 }
 
+.outdoor-map-layer {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: #d8d6cf;
+  filter: saturate(0.72) sepia(0.08) contrast(0.94);
+}
+
+.outdoor-map-layer.locked {
+  pointer-events: none;
+}
+
+.outdoor-map-layer .leaflet-control-attribution {
+  background: rgba(247, 243, 234, 0.86);
+  color: #3b554d;
+  font-size: 9px;
+}
+
+.outdoor-map-layer .leaflet-control-zoom {
+  border: 1px solid rgba(41, 77, 67, 0.44);
+  border-radius: 0;
+}
+
+.outdoor-map-layer .leaflet-control-zoom a {
+  border-radius: 0;
+  color: #294d43;
+}
+
 .map-board::after {
   content: "";
   position: absolute;
@@ -863,6 +1004,51 @@ h2 {
   stroke: rgba(56, 41, 24, 0.88);
   stroke-width: 2.6;
   stroke-linecap: round;
+}
+
+.outdoor-context .outdoor-feature {
+  vector-effect: non-scaling-stroke;
+}
+
+.outdoor-context .outdoor-building {
+  fill: rgba(91, 70, 45, 0.1);
+  stroke: rgba(56, 41, 24, 0.68);
+  stroke-width: 1.4;
+}
+
+.outdoor-context .outdoor-road {
+  fill: none;
+  stroke: rgba(119, 91, 57, 0.22);
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.outdoor-context .outdoor-path {
+  fill: none;
+  stroke: rgba(66, 53, 37, 0.5);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 5 4;
+}
+
+.outdoor-context .outdoor-fence {
+  fill: none;
+  stroke: rgba(56, 41, 24, 0.58);
+  stroke-width: 1.2;
+  stroke-dasharray: 2.5 2;
+}
+
+.outdoor-context .outdoor-water {
+  fill: rgba(84, 116, 118, 0.11);
+  stroke: rgba(58, 91, 94, 0.42);
+  stroke-width: 1.2;
+}
+
+.outdoor-context .outdoor-green {
+  fill: rgba(83, 108, 74, 0.075);
+  stroke: rgba(68, 87, 60, 0.2);
+  stroke-width: 1;
 }
 
 .map-lines.styled .map-walls-ink path {
@@ -999,6 +1185,18 @@ h2 {
   color: rgba(23, 34, 31, 0.72);
   font-size: 12px;
   font-weight: 700;
+}
+
+.map-data-credit {
+  position: absolute;
+  z-index: 12;
+  left: 12px;
+  bottom: 8px;
+  color: rgba(45, 52, 46, 0.5);
+  font-size: 8px;
+  line-height: 1;
+  text-decoration: none;
+  text-shadow: 0 1px 0 rgba(248, 238, 216, 0.82);
 }
 
 .map-point {
@@ -2010,6 +2208,36 @@ h2 {
     min-height: 480px;
     justify-content: flex-start;
     padding: 20px;
+  }
+
+  .outdoor-map-setup {
+    width: 100%;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .outdoor-map-search {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .outdoor-map-search label {
+    grid-column: 1 / -1;
+  }
+
+  .outdoor-map-search input {
+    border-right: 1px solid rgba(255, 255, 255, 0.38);
+  }
+
+  .outdoor-map-search button + button {
+    border-left: 1px solid rgba(255, 255, 255, 0.38);
+  }
+
+  .outdoor-map-actions {
+    justify-content: space-between;
+  }
+
+  .outdoor-map-actions button {
+    flex: 1;
   }
 
   .map-toolbar {
