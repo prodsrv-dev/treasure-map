@@ -22,6 +22,7 @@ const storageKey = "riddle-sphinx-registry-v1";
 
 const interfaceText = {
   English: {
+    pageTitle: "Riddle Generator",
     generator: "Generator", library: "Clue library", map: "Build a treasure map",
     eyebrow: "THE ANCIENT KEEPER OF CLEVER CLUES", headlineA: "Turn any hiding place into a", headlineB: "riddle.",
     intro: "Create child-friendly scavenger hunt clues in seconds. Choose a simple hint, a mystery, a rhyming couplet, or a full poem.",
@@ -40,6 +41,7 @@ const interfaceText = {
     mapNote: "Place every challenge on a beautiful printable adventure map and make the birthday quest unforgettable.", mapCta: "Create the full treasure map",
   },
   Español: {
+    pageTitle: "Generador de acertijos",
     generator: "Generador", library: "Biblioteca de pistas", map: "Crear mapa del tesoro",
     eyebrow: "EL ANTIGUO GUARDIÁN DE LOS ENIGMAS", headlineA: "Convierte cualquier escondite en un", headlineB: "enigma.",
     intro: "Crea pistas infantiles para una búsqueda del tesoro en segundos. Elige una pista sencilla, un acertijo, un pareado o un poema.",
@@ -58,6 +60,7 @@ const interfaceText = {
     mapNote: "Coloca cada desafío en un bonito mapa imprimible y crea una aventura de cumpleaños inolvidable.", mapCta: "Crear el mapa completo",
   },
   Русский: {
+    pageTitle: "Генератор загадок",
     generator: "Генератор", library: "Библиотека", map: "Создать карту сокровищ",
     eyebrow: "ДРЕВНИЙ ХРАНИТЕЛЬ МУДРЫХ ЗАГАДОК", headlineA: "Превратите любое тайное место в", headlineB: "загадку.",
     intro: "Создавайте детские подсказки для поиска сокровищ за секунды. Выберите простую подсказку, загадку, двустишие или стихотворение.",
@@ -171,10 +174,10 @@ function buildClues(answer: string, detail: string, format: Format, language: La
 }
 
 export default function RiddleGenerator() {
-  const [answer, setAnswer] = useState("bookshelf");
-  const [detail, setDetail] = useState("your favorite dragon story lives there");
+  const [answer, setAnswer] = useState("книжная полка");
+  const [detail, setDetail] = useState("там живёт любимая история о драконе");
   const [age, setAge] = useState("6–8");
-  const [language, setLanguage] = useState<Language>("English");
+  const [language, setLanguage] = useState<Language>("Русский");
   const [format, setFormat] = useState<Format>("Rhyming couplet");
   const [tone, setTone] = useState<Tone>("Mysterious");
   const [results, setResults] = useState<string[]>([]);
@@ -246,24 +249,10 @@ export default function RiddleGenerator() {
         </div><a className="nav-cta" href="/">{t.map}</a></div>
       </nav>
 
-      <header className="sphinx-hero">
-        <div className="hero-copy">
-          <p className="eyebrow">{t.eyebrow}</p>
-          <h1>{t.headlineA} <em>{t.headlineB}</em></h1>
-          <p className="hero-lede">{t.intro}</p>
-          <a className="gold-button" href="#generator">{t.ask} <span>↓</span></a>
-          <p className="hero-note">{t.note}</p>
-        </div>
-        <div className="hero-art" role="img" aria-label="A wise Sphinx beneath the moon">
-          <img src="/riddle-sphinx-hero.png" alt="A wise golden Sphinx guarding riddles beneath a moonlit sky" />
-        </div>
-      </header>
-
       <section className="generator-section" id="generator">
-        <div className="section-heading">
-          <p className="eyebrow">{t.chamber}</p>
-          <h2>{t.find}</h2>
-          <p>{t.findNote}</p>
+        <div className="tool-heading">
+          <div className="tool-title"><span aria-hidden="true">𓂀</span><div><p className="eyebrow">{t.eyebrow}</p><h1>{t.pageTitle}</h1></div></div>
+          <p>{t.intro}</p>
         </div>
         <div className="generator-grid">
           <form className="papyrus-card" onSubmit={generate}>
