@@ -42,3 +42,6 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+
+# local Google Ads credentials
+/.google-ads-oauth.json
