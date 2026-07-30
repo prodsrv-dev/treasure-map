@@ -210,6 +210,19 @@ export default function RiddleGenerator() {
     if (saved) {
       try { setRecords(JSON.parse(saved)); } catch { /* keep samples */ }
     }
+    const restoreLatest = async () => {
+      try {
+        const response = await fetch("/api/riddle-jobs/latest", { cache: "no-store" });
+        const job = await response.json();
+        if (job.status === "completed" && job.result) {
+          setResults(JSON.parse(job.result));
+        } else if (job.status === "pending" && job.id) {
+          setJobId(job.id);
+          setGenerationStatus("pending");
+        }
+      } catch { /* the local queue may not be running yet */ }
+    };
+    void restoreLatest();
   }, []);
 
   useEffect(() => {
@@ -221,12 +234,15 @@ export default function RiddleGenerator() {
         if (job.status === "completed") {
           const generated = JSON.parse(job.result || "[]");
           setResults(generated);
+          localStorage.setItem("riddle-sphinx-last-results", JSON.stringify(generated));
           setGenerationStatus("idle");
           setJobId("");
+          localStorage.removeItem("riddle-sphinx-current-job");
         } else if (job.status === "failed") {
           setGenerationError(job.error || "Generation failed");
           setGenerationStatus("failed");
           setJobId("");
+          localStorage.removeItem("riddle-sphinx-current-job");
         }
       } catch {
         setGenerationError(language === "Русский" ? "Не удалось проверить очередь." : "Could not check the queue.");
@@ -254,6 +270,7 @@ export default function RiddleGenerator() {
       const job = await response.json();
       if (!response.ok) throw new Error(job.error || "Could not create job");
       setJobId(job.id);
+      localStorage.setItem("riddle-sphinx-current-job", job.id);
       document.querySelector("#sphinx-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
       setGenerationStatus("failed");

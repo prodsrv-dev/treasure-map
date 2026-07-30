@@ -58,6 +58,13 @@ async function handleRiddleQueue(request: Request, env: Env, url: URL) {
     return json({ id, status: "pending" }, 202);
   }
 
+  if (url.pathname === "/api/riddle-jobs/latest" && request.method === "GET") {
+    const job = await env.DB.prepare(`SELECT id, status, result, error
+      FROM riddle_jobs WHERE status IN ('completed', 'pending')
+      ORDER BY created_at DESC LIMIT 1`).first();
+    return job ? json(job) : json({ status: "empty" });
+  }
+
   if (url.pathname.startsWith("/api/riddle-jobs/") && request.method === "GET") {
     const id = url.pathname.split("/").pop();
     const job = await env.DB.prepare("SELECT id, status, result, error FROM riddle_jobs WHERE id = ?").bind(id).first();
