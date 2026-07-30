@@ -29,7 +29,7 @@ const interfaceText = {
     ask: "Ask the Sphinx", note: "Free to use · English, Spanish & Russian · Saved in your browser",
     chamber: "ENTER THE CHAMBER", find: "What must the seeker find?", findNote: "Give the Sphinx a few details. The more personal the clue, the more magical the hunt feels.",
     hidden: "The hidden answer", hiddenNote: "What place or object should the player find?", answer: "Answer or hiding place",
-    detail: "A personal detail", age: "Child's age", language: "Interface & clue language",
+    detail: "Object properties", age: "Child's age", language: "Interface & clue language",
     style: "Choose a clue style", mood: "Pick the mood", consult: "Consult the Sphinx",
     prototype: "Working prototype: clues are created on-device; a live AI model can be connected next.",
     answers: "THE SPHINX ANSWERS", three: "Three clues for your quest", waiting: "Your clues will appear here",
@@ -48,7 +48,7 @@ const interfaceText = {
     ask: "Pregunta a la Esfinge", note: "Gratis · Inglés, español y ruso · Guardado en tu navegador",
     chamber: "ENTRA EN LA CÁMARA", find: "¿Qué debe encontrar el buscador?", findNote: "Dale algunos detalles a la Esfinge. Cuanto más personal sea la pista, más mágica será la aventura.",
     hidden: "La respuesta oculta", hiddenNote: "¿Qué lugar u objeto debe encontrar el jugador?", answer: "Respuesta o escondite",
-    detail: "Un detalle personal", age: "Edad del niño", language: "Idioma de la interfaz y la pista",
+    detail: "Propiedades del objeto", age: "Edad del niño", language: "Idioma de la interfaz y la pista",
     style: "Elige el estilo de pista", mood: "Elige el ambiente", consult: "Consultar a la Esfinge",
     prototype: "Prototipo funcional: las pistas se crean en el dispositivo; después se puede conectar un modelo de IA.",
     answers: "LA ESFINGE RESPONDE", three: "Tres pistas para tu aventura", waiting: "Tus pistas aparecerán aquí",
@@ -67,7 +67,7 @@ const interfaceText = {
     ask: "Спросить Сфинкса", note: "Бесплатно · Английский, испанский и русский · Сохраняется в браузере",
     chamber: "ВОЙДИТЕ В ЗАЛ", find: "Что должен найти искатель?", findNote: "Дайте Сфинксу несколько деталей. Чем личнее подсказка, тем волшебнее приключение.",
     hidden: "Скрытый ответ", hiddenNote: "Какое место или предмет должен найти игрок?", answer: "Ответ или тайное место",
-    detail: "Личная деталь", age: "Возраст ребёнка", language: "Язык интерфейса и загадки",
+    detail: "Свойства объекта", age: "Возраст ребёнка", language: "Язык интерфейса и загадки",
     style: "Выберите формат", mood: "Выберите настроение", consult: "Спросить Сфинкса",
     prototype: "Рабочий прототип: подсказки создаются на устройстве; следующим шагом можно подключить AI-модель.",
     answers: "СФИНКС ОТВЕЧАЕТ", three: "Три подсказки для вашего квеста", waiting: "Здесь появятся загадки",
@@ -175,7 +175,7 @@ function buildClues(answer: string, detail: string, format: Format, language: La
 
 export default function RiddleGenerator() {
   const [answer, setAnswer] = useState("книжная полка");
-  const [detail, setDetail] = useState("там живёт любимая история о драконе");
+  const [detail, setDetail] = useState("стоит на кухне, белого цвета, с круглой ручкой");
   const [age, setAge] = useState("6–8");
   const [language, setLanguage] = useState<Language>("Русский");
   const [format, setFormat] = useState<Format>("Rhyming couplet");
@@ -258,7 +258,7 @@ export default function RiddleGenerator() {
           <form className="papyrus-card" onSubmit={generate}>
             <div className="step-title"><span>1</span><div><b>{t.hidden}</b><small>{t.hiddenNote}</small></div></div>
             <label>{t.answer}<input value={answer} onChange={(e) => setAnswer(e.target.value)} required placeholder={language === "Русский" ? "например, книжная полка" : language === "Español" ? "por ejemplo, estantería" : "e.g. bookshelf"} /></label>
-            <label>{t.detail}<textarea value={detail} onChange={(e) => setDetail(e.target.value)} placeholder={language === "Русский" ? "например, там живёт любимая история о драконе" : language === "Español" ? "por ejemplo, allí vive tu historia favorita de dragones" : "e.g. your favorite dragon story lives there"} /></label>
+            <label>{t.detail}<textarea value={detail} onChange={(e) => setDetail(e.target.value)} placeholder={language === "Русский" ? "например: стоит на кухне, белого цвета, с круглой ручкой" : language === "Español" ? "por ejemplo: está en la cocina, es blanco y tiene un asa redonda" : "e.g. it is in the kitchen, white, with a round handle"} /></label>
             <div className="form-row">
               <label>{t.age}<select value={age} onChange={(e) => setAge(e.target.value)}><option>3–5</option><option>6–8</option><option>9–12</option><option>13+</option></select></label>
               <label>{t.language}<select value={language} onChange={(e) => setLanguage(e.target.value as Language)}><option>English</option><option>Español</option><option>Русский</option></select></label>
