@@ -181,6 +181,9 @@ export default function RiddleGenerator() {
   const [format, setFormat] = useState<Format>("Rhyming couplet");
   const [tone, setTone] = useState<Tone>("Mysterious");
   const [results, setResults] = useState<string[]>([]);
+  const [jobId, setJobId] = useState("");
+  const [generationStatus, setGenerationStatus] = useState<"idle" | "pending" | "failed">("idle");
+  const [generationError, setGenerationError] = useState("");
   const [records, setRecords] = useState<RecordItem[]>(starters);
   const [query, setQuery] = useState("");
   const [formatFilter, setFormatFilter] = useState("All formats");
@@ -209,15 +212,53 @@ export default function RiddleGenerator() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!jobId || generationStatus !== "pending") return;
+    const timer = window.setInterval(async () => {
+      try {
+        const response = await fetch(`/api/riddle-jobs/${jobId}`, { cache: "no-store" });
+        const job = await response.json();
+        if (job.status === "completed") {
+          const generated = JSON.parse(job.result || "[]");
+          setResults(generated);
+          setGenerationStatus("idle");
+          setJobId("");
+        } else if (job.status === "failed") {
+          setGenerationError(job.error || "Generation failed");
+          setGenerationStatus("failed");
+          setJobId("");
+        }
+      } catch {
+        setGenerationError(language === "Русский" ? "Не удалось проверить очередь." : "Could not check the queue.");
+      }
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [jobId, generationStatus, language]);
+
   const filtered = useMemo(() => records.filter((item) => {
     const matchText = `${item.clue} ${item.answer} ${item.detail}`.toLowerCase().includes(query.toLowerCase());
     return matchText && (formatFilter === "All formats" || item.format === formatFilter);
   }), [records, query, formatFilter]);
 
-  function generate(event: FormEvent) {
+  async function generate(event: FormEvent) {
     event.preventDefault();
-    setResults(buildClues(answer, detail, format, language));
-    document.querySelector("#sphinx-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setResults([]);
+    setGenerationError("");
+    setGenerationStatus("pending");
+    try {
+      const response = await fetch("/api/riddle-jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answer, properties: detail, age, language, format, tone }),
+      });
+      const job = await response.json();
+      if (!response.ok) throw new Error(job.error || "Could not create job");
+      setJobId(job.id);
+      document.querySelector("#sphinx-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (error) {
+      setGenerationStatus("failed");
+      setGenerationError(error instanceof Error ? error.message : "Could not create job");
+    }
   }
 
   function save(clue: string) {
@@ -267,14 +308,14 @@ export default function RiddleGenerator() {
               {formats.map((item) => <button type="button" key={item} className={format === item ? "selected" : ""} onClick={() => setFormat(item)}>{item.includes("Rhyming") && <i>{language === "Русский" ? "РИФМА" : language === "Español" ? "RIMA" : "RHYME"}</i>}<b>{formatLabel(item)}</b><small>{formatNote(item)}</small></button>)}
             </div></fieldset>
             <fieldset><legend><span>3</span> {t.mood}</legend><div className="tone-row">{tones.map((item) => <button type="button" key={item} className={tone === item ? "selected" : ""} onClick={() => setTone(item)}>{toneLabel(item)}</button>)}</div></fieldset>
-            <button className="consult-button" type="submit">✦ {t.consult}</button>
-            <p className="prototype-note">{t.prototype}</p>
+            <button className="consult-button" type="submit" disabled={generationStatus === "pending"}>✦ {generationStatus === "pending" ? (language === "Русский" ? "Сфинкс размышляет…" : language === "Español" ? "La Esfinge está pensando…" : "The Sphinx is thinking…") : t.consult}</button>
+            <p className="prototype-note">{language === "Русский" ? "Тестовый режим: запрос сохраняется в очередь и обрабатывается Codex." : language === "Español" ? "Modo de prueba: la solicitud se guarda en una cola y Codex la procesa." : "Test mode: the request is queued and processed by Codex."}</p>
           </form>
 
           <aside className="results-card" id="sphinx-results">
             <p className="eyebrow">{t.answers}</p>
             <h3>{results.length ? t.three : t.waiting}</h3>
-            {!results.length && <div className="empty-oracle"><span>𓂀</span><p>{t.complete}</p></div>}
+            {!results.length && <div className="empty-oracle"><span>𓂀</span><p>{generationStatus === "pending" ? (language === "Русский" ? "Запрос в очереди. Обычно ответ появляется в течение минуты." : language === "Español" ? "Solicitud en cola. La respuesta suele aparecer en un minuto." : "Request queued. The answer usually appears within a minute.") : generationError || t.complete}</p></div>}
             {results.map((clue, index) => <article className="clue-result" key={clue}>
               <div><span>{t.variant} {index + 1}</span>{format.includes("Rhyming") && <i>{t.rhymed}</i>}</div>
               <p>{clue}</p>
