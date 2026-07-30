@@ -20,6 +20,63 @@ const formats: Format[] = ["Simple clue", "Riddle", "Rhyming couplet", "Rhyming 
 const tones: Tone[] = ["Mysterious", "Funny", "Pirate", "Fairy-tale"];
 const storageKey = "riddle-sphinx-registry-v1";
 
+const interfaceText = {
+  English: {
+    generator: "Generator", library: "Clue library", map: "Build a treasure map",
+    eyebrow: "THE ANCIENT KEEPER OF CLEVER CLUES", headlineA: "Turn any hiding place into a", headlineB: "riddle.",
+    intro: "Create child-friendly scavenger hunt clues in seconds. Choose a simple hint, a mystery, a rhyming couplet, or a full poem.",
+    ask: "Ask the Sphinx", note: "Free to use · English, Spanish & Russian · Saved in your browser",
+    chamber: "ENTER THE CHAMBER", find: "What must the seeker find?", findNote: "Give the Sphinx a few details. The more personal the clue, the more magical the hunt feels.",
+    hidden: "The hidden answer", hiddenNote: "What place or object should the player find?", answer: "Answer or hiding place",
+    detail: "A personal detail", age: "Child's age", language: "Interface & clue language",
+    style: "Choose a clue style", mood: "Pick the mood", consult: "Consult the Sphinx",
+    prototype: "Working prototype: clues are created on-device; a live AI model can be connected next.",
+    answers: "THE SPHINX ANSWERS", three: "Three clues for your quest", waiting: "Your clues will appear here",
+    complete: "Complete the scroll and consult the Sphinx.", variant: "VARIANT", rhymed: "RHYMED",
+    copy: "Copy", copied: "Copied!", save: "Save to library",
+    archive: "THE ARCHIVE OF ANSWERS", growing: "Your growing clue library", archiveNote: "Every saved clue becomes reusable content for future hunts.",
+    search: "Search clues, answers, or details…", all: "All formats", answerHead: "ANSWER", languageHead: "LANGUAGE", empty: "No clues match these filters.",
+    world: "A RIDDLE NEEDS A WORLD", mapTitle: "Turn your clues into a treasure map.",
+    mapNote: "Place every challenge on a beautiful printable adventure map and make the birthday quest unforgettable.", mapCta: "Create the full treasure map",
+  },
+  Español: {
+    generator: "Generador", library: "Biblioteca de pistas", map: "Crear mapa del tesoro",
+    eyebrow: "EL ANTIGUO GUARDIÁN DE LOS ENIGMAS", headlineA: "Convierte cualquier escondite en un", headlineB: "enigma.",
+    intro: "Crea pistas infantiles para una búsqueda del tesoro en segundos. Elige una pista sencilla, un acertijo, un pareado o un poema.",
+    ask: "Pregunta a la Esfinge", note: "Gratis · Inglés, español y ruso · Guardado en tu navegador",
+    chamber: "ENTRA EN LA CÁMARA", find: "¿Qué debe encontrar el buscador?", findNote: "Dale algunos detalles a la Esfinge. Cuanto más personal sea la pista, más mágica será la aventura.",
+    hidden: "La respuesta oculta", hiddenNote: "¿Qué lugar u objeto debe encontrar el jugador?", answer: "Respuesta o escondite",
+    detail: "Un detalle personal", age: "Edad del niño", language: "Idioma de la interfaz y la pista",
+    style: "Elige el estilo de pista", mood: "Elige el ambiente", consult: "Consultar a la Esfinge",
+    prototype: "Prototipo funcional: las pistas se crean en el dispositivo; después se puede conectar un modelo de IA.",
+    answers: "LA ESFINGE RESPONDE", three: "Tres pistas para tu aventura", waiting: "Tus pistas aparecerán aquí",
+    complete: "Completa el pergamino y consulta a la Esfinge.", variant: "VARIANTE", rhymed: "CON RIMA",
+    copy: "Copiar", copied: "¡Copiado!", save: "Guardar",
+    archive: "EL ARCHIVO DE RESPUESTAS", growing: "Tu biblioteca de pistas", archiveNote: "Cada pista guardada puede reutilizarse en futuras aventuras.",
+    search: "Buscar pistas, respuestas o detalles…", all: "Todos los formatos", answerHead: "RESPUESTA", languageHead: "IDIOMA", empty: "Ninguna pista coincide con los filtros.",
+    world: "UN ENIGMA NECESITA UN MUNDO", mapTitle: "Convierte tus pistas en un mapa del tesoro.",
+    mapNote: "Coloca cada desafío en un bonito mapa imprimible y crea una aventura de cumpleaños inolvidable.", mapCta: "Crear el mapa completo",
+  },
+  Русский: {
+    generator: "Генератор", library: "Библиотека", map: "Создать карту сокровищ",
+    eyebrow: "ДРЕВНИЙ ХРАНИТЕЛЬ МУДРЫХ ЗАГАДОК", headlineA: "Превратите любое тайное место в", headlineB: "загадку.",
+    intro: "Создавайте детские подсказки для поиска сокровищ за секунды. Выберите простую подсказку, загадку, двустишие или стихотворение.",
+    ask: "Спросить Сфинкса", note: "Бесплатно · Английский, испанский и русский · Сохраняется в браузере",
+    chamber: "ВОЙДИТЕ В ЗАЛ", find: "Что должен найти искатель?", findNote: "Дайте Сфинксу несколько деталей. Чем личнее подсказка, тем волшебнее приключение.",
+    hidden: "Скрытый ответ", hiddenNote: "Какое место или предмет должен найти игрок?", answer: "Ответ или тайное место",
+    detail: "Личная деталь", age: "Возраст ребёнка", language: "Язык интерфейса и загадки",
+    style: "Выберите формат", mood: "Выберите настроение", consult: "Спросить Сфинкса",
+    prototype: "Рабочий прототип: подсказки создаются на устройстве; следующим шагом можно подключить AI-модель.",
+    answers: "СФИНКС ОТВЕЧАЕТ", three: "Три подсказки для вашего квеста", waiting: "Здесь появятся загадки",
+    complete: "Заполните свиток и спросите Сфинкса.", variant: "ВАРИАНТ", rhymed: "В РИФМУ",
+    copy: "Копировать", copied: "Скопировано!", save: "Сохранить",
+    archive: "АРХИВ ОТВЕТОВ", growing: "Ваша библиотека загадок", archiveNote: "Каждую сохранённую загадку можно использовать в будущих квестах.",
+    search: "Поиск по загадкам, ответам и деталям…", all: "Все форматы", answerHead: "ОТВЕТ", languageHead: "ЯЗЫК", empty: "По этим фильтрам ничего не найдено.",
+    world: "ЗАГАДКЕ НУЖЕН ЦЕЛЫЙ МИР", mapTitle: "Превратите загадки в карту сокровищ.",
+    mapNote: "Разместите все испытания на красивой печатной карте и создайте незабываемое приключение.", mapCta: "Создать полную карту",
+  },
+} satisfies Record<Language, Record<string, string>>;
+
 const starters: RecordItem[] = [
   {
     id: "starter-1",
@@ -125,6 +182,22 @@ export default function RiddleGenerator() {
   const [query, setQuery] = useState("");
   const [formatFilter, setFormatFilter] = useState("All formats");
   const [copied, setCopied] = useState("");
+  const t = interfaceText[language];
+  const formatLabel = (item: Format) => language === "Русский"
+    ? ({ "Simple clue": "Простая подсказка", Riddle: "Загадка", "Rhyming couplet": "Двустишие", "Rhyming poem": "Стихотворение" }[item])
+    : language === "Español"
+      ? ({ "Simple clue": "Pista sencilla", Riddle: "Acertijo", "Rhyming couplet": "Pareado", "Rhyming poem": "Poema" }[item])
+      : item;
+  const toneLabel = (item: Tone) => language === "Русский"
+    ? ({ Mysterious: "Таинственное", Funny: "Весёлое", Pirate: "Пиратское", "Fairy-tale": "Сказочное" }[item])
+    : language === "Español"
+      ? ({ Mysterious: "Misterioso", Funny: "Divertido", Pirate: "Pirata", "Fairy-tale": "De cuento" }[item])
+      : item;
+  const formatNote = (item: Format) => {
+    if (language === "Русский") return { "Simple clue": "Просто и понятно", Riddle: "Нужно разгадать", "Rhyming couplet": "Две строки в рифму", "Rhyming poem": "Четыре музыкальные строки" }[item];
+    if (language === "Español") return { "Simple clue": "Clara y rápida", Riddle: "Una pregunta por resolver", "Rhyming couplet": "Dos versos con rima", "Rhyming poem": "Cuatro versos musicales" }[item];
+    return item === "Rhyming poem" ? "Four musical lines" : item === "Rhyming couplet" ? "Two lines that rhyme" : item === "Riddle" ? "A question to solve" : "Clear and quick";
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem(storageKey);
@@ -168,16 +241,18 @@ export default function RiddleGenerator() {
     <main className="sphinx-page">
       <nav className="sphinx-nav" aria-label="Main navigation">
         <a className="sphinx-brand" href="/"><span>𓂀</span> RIDDLE SPHINX</a>
-        <div><a href="#generator">Generator</a><a href="#library">Clue library</a><a className="nav-cta" href="/">Build a treasure map</a></div>
+        <div className="nav-links"><a href="#generator">{t.generator}</a><a href="#library">{t.library}</a><div className="language-switch" aria-label={t.language}>
+          {(["English", "Español", "Русский"] as Language[]).map((item) => <button key={item} className={language === item ? "active" : ""} onClick={() => setLanguage(item)} aria-label={`Switch to ${item}`}>{item === "English" ? "EN" : item === "Español" ? "ES" : "RU"}</button>)}
+        </div><a className="nav-cta" href="/">{t.map}</a></div>
       </nav>
 
       <header className="sphinx-hero">
         <div className="hero-copy">
-          <p className="eyebrow">THE ANCIENT KEEPER OF CLEVER CLUES</p>
-          <h1>Turn any hiding place into a <em>riddle.</em></h1>
-          <p className="hero-lede">Create child-friendly scavenger hunt clues in seconds. Choose a simple hint, a mystery, a rhyming couplet, or a full poem.</p>
-          <a className="gold-button" href="#generator">Ask the Sphinx <span>↓</span></a>
-          <p className="hero-note">Free to use · English, Spanish & Russian · Saved in your browser</p>
+          <p className="eyebrow">{t.eyebrow}</p>
+          <h1>{t.headlineA} <em>{t.headlineB}</em></h1>
+          <p className="hero-lede">{t.intro}</p>
+          <a className="gold-button" href="#generator">{t.ask} <span>↓</span></a>
+          <p className="hero-note">{t.note}</p>
         </div>
         <div className="hero-art" role="img" aria-label="A wise Sphinx beneath the moon">
           <img src="/riddle-sphinx-hero.png" alt="A wise golden Sphinx guarding riddles beneath a moonlit sky" />
@@ -186,56 +261,56 @@ export default function RiddleGenerator() {
 
       <section className="generator-section" id="generator">
         <div className="section-heading">
-          <p className="eyebrow">ENTER THE CHAMBER</p>
-          <h2>What must the seeker find?</h2>
-          <p>Give the Sphinx a few details. The more personal the clue, the more magical the hunt feels.</p>
+          <p className="eyebrow">{t.chamber}</p>
+          <h2>{t.find}</h2>
+          <p>{t.findNote}</p>
         </div>
         <div className="generator-grid">
           <form className="papyrus-card" onSubmit={generate}>
-            <div className="step-title"><span>1</span><div><b>The hidden answer</b><small>What place or object should the player find?</small></div></div>
-            <label>Answer or hiding place<input value={answer} onChange={(e) => setAnswer(e.target.value)} required placeholder="e.g. bookshelf" /></label>
-            <label>A personal detail<textarea value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="e.g. your favorite dragon story lives there" /></label>
+            <div className="step-title"><span>1</span><div><b>{t.hidden}</b><small>{t.hiddenNote}</small></div></div>
+            <label>{t.answer}<input value={answer} onChange={(e) => setAnswer(e.target.value)} required placeholder={language === "Русский" ? "например, книжная полка" : language === "Español" ? "por ejemplo, estantería" : "e.g. bookshelf"} /></label>
+            <label>{t.detail}<textarea value={detail} onChange={(e) => setDetail(e.target.value)} placeholder={language === "Русский" ? "например, там живёт любимая история о драконе" : language === "Español" ? "por ejemplo, allí vive tu historia favorita de dragones" : "e.g. your favorite dragon story lives there"} /></label>
             <div className="form-row">
-              <label>Child&apos;s age<select value={age} onChange={(e) => setAge(e.target.value)}><option>3–5</option><option>6–8</option><option>9–12</option><option>13+</option></select></label>
-              <label>Language<select value={language} onChange={(e) => setLanguage(e.target.value as Language)}><option>English</option><option>Español</option><option>Русский</option></select></label>
+              <label>{t.age}<select value={age} onChange={(e) => setAge(e.target.value)}><option>3–5</option><option>6–8</option><option>9–12</option><option>13+</option></select></label>
+              <label>{t.language}<select value={language} onChange={(e) => setLanguage(e.target.value as Language)}><option>English</option><option>Español</option><option>Русский</option></select></label>
             </div>
-            <fieldset><legend><span>2</span> Choose a clue style</legend><div className="choice-grid">
-              {formats.map((item) => <button type="button" key={item} className={format === item ? "selected" : ""} onClick={() => setFormat(item)}>{item.includes("Rhyming") && <i>RHYME</i>}<b>{item}</b><small>{item === "Rhyming poem" ? "Four musical lines" : item === "Rhyming couplet" ? "Two lines that rhyme" : item === "Riddle" ? "A question to solve" : "Clear and quick"}</small></button>)}
+            <fieldset><legend><span>2</span> {t.style}</legend><div className="choice-grid">
+              {formats.map((item) => <button type="button" key={item} className={format === item ? "selected" : ""} onClick={() => setFormat(item)}>{item.includes("Rhyming") && <i>{language === "Русский" ? "РИФМА" : language === "Español" ? "RIMA" : "RHYME"}</i>}<b>{formatLabel(item)}</b><small>{formatNote(item)}</small></button>)}
             </div></fieldset>
-            <fieldset><legend><span>3</span> Pick the mood</legend><div className="tone-row">{tones.map((item) => <button type="button" key={item} className={tone === item ? "selected" : ""} onClick={() => setTone(item)}>{item}</button>)}</div></fieldset>
-            <button className="consult-button" type="submit">✦ Consult the Sphinx</button>
-            <p className="prototype-note">Working page prototype: clues are created on-device; a live AI model can be connected to the same interface next.</p>
+            <fieldset><legend><span>3</span> {t.mood}</legend><div className="tone-row">{tones.map((item) => <button type="button" key={item} className={tone === item ? "selected" : ""} onClick={() => setTone(item)}>{toneLabel(item)}</button>)}</div></fieldset>
+            <button className="consult-button" type="submit">✦ {t.consult}</button>
+            <p className="prototype-note">{t.prototype}</p>
           </form>
 
           <aside className="results-card" id="sphinx-results">
-            <p className="eyebrow">THE SPHINX ANSWERS</p>
-            <h3>{results.length ? "Three clues for your quest" : "Your clues will appear here"}</h3>
-            {!results.length && <div className="empty-oracle"><span>𓂀</span><p>Complete the scroll and consult the Sphinx.</p></div>}
+            <p className="eyebrow">{t.answers}</p>
+            <h3>{results.length ? t.three : t.waiting}</h3>
+            {!results.length && <div className="empty-oracle"><span>𓂀</span><p>{t.complete}</p></div>}
             {results.map((clue, index) => <article className="clue-result" key={clue}>
-              <div><span>VARIANT {index + 1}</span>{format.includes("Rhyming") && <i>RHYMED</i>}</div>
+              <div><span>{t.variant} {index + 1}</span>{format.includes("Rhyming") && <i>{t.rhymed}</i>}</div>
               <p>{clue}</p>
-              <footer><button onClick={() => copy(clue, `result-${index}`)}>{copied === `result-${index}` ? "Copied!" : "Copy"}</button><button onClick={() => save(clue)}>Save to library</button></footer>
+              <footer><button onClick={() => copy(clue, `result-${index}`)}>{copied === `result-${index}` ? t.copied : t.copy}</button><button onClick={() => save(clue)}>{t.save}</button></footer>
             </article>)}
           </aside>
         </div>
       </section>
 
       <section className="library-section" id="library">
-        <div className="section-heading light"><p className="eyebrow">THE ARCHIVE OF ANSWERS</p><h2>Your growing clue library</h2><p>Every saved clue becomes reusable content for future hunts.</p></div>
-        <div className="library-tools"><label><span className="sr-only">Search clues</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search clues, answers, or details…" /></label><select aria-label="Filter by format" value={formatFilter} onChange={(e) => setFormatFilter(e.target.value)}><option>All formats</option>{formats.map((item) => <option key={item}>{item}</option>)}</select></div>
+        <div className="section-heading light"><p className="eyebrow">{t.archive}</p><h2>{t.growing}</h2><p>{t.archiveNote}</p></div>
+        <div className="library-tools"><label><span className="sr-only">{t.search}</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.search} /></label><select aria-label={t.all} value={formatFilter} onChange={(e) => setFormatFilter(e.target.value)}><option value="All formats">{t.all}</option>{formats.map((item) => <option value={item} key={item}>{formatLabel(item)}</option>)}</select></div>
         <div className="clue-table">
           {filtered.map((item) => <article key={item.id}>
-            <div className="clue-main"><span>{item.format}</span><p>{item.clue}</p></div>
-            <div><small>ANSWER</small><b>{item.answer}</b></div>
-            <div><small>LANGUAGE</small><b>{item.language}</b></div>
-            <button onClick={() => copy(item.clue, item.id)}>{copied === item.id ? "Copied!" : "Copy"}</button>
+            <div className="clue-main"><span>{formatLabel(item.format)}</span><p>{item.clue}</p></div>
+            <div><small>{t.answerHead}</small><b>{item.answer}</b></div>
+            <div><small>{t.languageHead}</small><b>{item.language}</b></div>
+            <button onClick={() => copy(item.clue, item.id)}>{copied === item.id ? t.copied : t.copy}</button>
           </article>)}
-          {!filtered.length && <p className="no-results">No clues match these filters.</p>}
+          {!filtered.length && <p className="no-results">{t.empty}</p>}
         </div>
       </section>
 
       <section className="map-upsell">
-        <div><p className="eyebrow">A RIDDLE NEEDS A WORLD</p><h2>Turn your clues into a treasure map.</h2><p>Place every challenge on a beautiful printable adventure map and make the birthday quest unforgettable.</p><a className="gold-button" href="/">Create the full treasure map <span>→</span></a></div>
+        <div><p className="eyebrow">{t.world}</p><h2>{t.mapTitle}</h2><p>{t.mapNote}</p><a className="gold-button" href="/">{t.mapCta} <span>→</span></a></div>
         <div className="map-symbol" aria-hidden="true"><span>✕</span><i>⌁</i><b>◉</b></div>
       </section>
     </main>
