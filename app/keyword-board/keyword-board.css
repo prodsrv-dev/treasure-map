@@ -210,6 +210,23 @@
 
 .board-message { margin: -10px 0 20px; }
 
+.keyword-table-wrap { width: 100%; overflow-x: auto; border: 1px solid rgba(20, 39, 32, .2); background: #fffdf8; }
+.keyword-table { width: 100%; min-width: 1180px; border-collapse: collapse; font-size: 12px; }
+.keyword-table th { height: 44px; background: #e9e4d8; color: #52655e; font-size: 10px; letter-spacing: .06em; text-align: left; text-transform: uppercase; }
+.keyword-table th, .keyword-table td { border-right: 1px solid rgba(20, 39, 32, .11); border-bottom: 1px solid rgba(20, 39, 32, .11); padding: 9px 10px; vertical-align: middle; }
+.keyword-table tbody tr:hover { background: #f7f2e7; }
+.query-cell { width: 270px; }
+.query-cell strong, .query-cell span { display: block; }
+.query-cell strong { margin-bottom: 3px; font-size: 14px; }
+.query-cell span { color: #71827b; font-size: 11px; }
+.number-cell { text-align: center; font-family: Georgia, "Times New Roman", serif; font-size: 17px; }
+.number-cell.positive { color: #a73827; }
+.keyword-table select { width: 100%; min-width: 105px; min-height: 32px; border: 1px solid rgba(20, 39, 32, .2); background: white; color: #142720; padding: 4px 6px; font: inherit; }
+.table-actions { white-space: nowrap; }
+.table-actions a { color: #9f3928; font-weight: 700; }
+.table-actions button { margin-left: 10px; border: 0; background: transparent; color: #89928e; cursor: pointer; font-size: 20px; line-height: 1; }
+.table-actions button:hover { color: #9f3928; }
+
 .keyword-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -238,30 +238,24 @@ export default function KeywordBoard() {
 
       {message && !formOpen && <p className="board-message">{message}</p>}
       {loading ? <div className="board-empty">Загружаем исследование…</div> : filtered.length === 0 ? <div className="board-empty">По выбранным фильтрам запросов нет.</div> : (
-        <section className="keyword-grid" aria-label="Карточки поисковых запросов">
-          {filtered.map(item => (
-            <article className={`keyword-card priority-${item.priority.toLowerCase()}`} key={item.id}>
-              <div className="card-topline"><span>{item.language} · {item.country}</span><span>{item.category}</span></div>
-              <h2>{item.query}</h2>
-              <p className="translation">({item.translation})</p>
-              <div className="trend-pair">
-                <div><span>5 лет</span><strong>{item.trendFiveYears ?? "—"}</strong></div>
-                <div><span>12 мес.</span><strong>{item.trendTwelveMonths ?? "—"}</strong></div>
-                <div className="trend-change"><span>Изменение</span><strong>{item.trendFiveYears !== null && item.trendTwelveMonths !== null ? `${item.trendTwelveMonths - item.trendFiveYears >= 0 ? "+" : ""}${item.trendTwelveMonths - item.trendFiveYears}` : "—"}</strong></div>
-              </div>
-              <dl><div><dt>Намерение</dt><dd>{item.intent}</dd></div><div><dt>Сезон</dt><dd>{item.season}</dd></div></dl>
-              {item.notes && <p className="card-notes">{item.notes}</p>}
-              <div className="card-controls">
-                <select value={item.status} onChange={e => update(item.id, { status: e.target.value })} aria-label={`Статус ${item.query}`}><option>К проверке</option><option>Проверено</option><option>Приоритет</option><option>Архив</option></select>
-                <select value={item.priority} onChange={e => update(item.id, { priority: e.target.value })} aria-label={`Приоритет ${item.query}`}><option>Высокий</option><option>Средний</option><option>Низкий</option></select>
-              </div>
-              <div className="card-actions">
-                {item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer">Открыть Trends ↗</a> : <span>Ссылка не добавлена</span>}
-                <button onClick={() => remove(item.id)} aria-label={`Удалить ${item.query}`}>Удалить</button>
-              </div>
-            </article>
-          ))}
-        </section>
+        <div className="keyword-table-wrap">
+          <table className="keyword-table" aria-label="Реестр поисковых запросов">
+            <thead><tr><th>Запрос</th><th>Язык</th><th>Продукт</th><th>5 лет</th><th>12 мес.</th><th>Δ</th><th>Сезон</th><th>Статус</th><th>Приоритет</th><th>Действия</th></tr></thead>
+            <tbody>{filtered.map(item => {
+              const change = item.trendFiveYears !== null && item.trendTwelveMonths !== null ? item.trendTwelveMonths - item.trendFiveYears : null;
+              return <tr key={item.id}>
+                <td className="query-cell"><strong>{item.query}</strong><span>({item.translation})</span></td>
+                <td>{item.language} · {item.country}</td><td>{item.category}</td>
+                <td className="number-cell">{item.trendFiveYears ?? "—"}</td><td className="number-cell">{item.trendTwelveMonths ?? "—"}</td>
+                <td className={`number-cell ${change !== null && change > 0 ? "positive" : ""}`}>{change === null ? "—" : `${change >= 0 ? "+" : ""}${change}`}</td>
+                <td>{item.season}</td>
+                <td><select value={item.status} onChange={e => update(item.id, { status: e.target.value })} aria-label={`Статус ${item.query}`}><option>К проверке</option><option>Проверено</option><option>Приоритет</option><option>Архив</option></select></td>
+                <td><select value={item.priority} onChange={e => update(item.id, { priority: e.target.value })} aria-label={`Приоритет ${item.query}`}><option>Высокий</option><option>Средний</option><option>Низкий</option></select></td>
+                <td className="table-actions">{item.sourceUrl && <a href={item.sourceUrl} target="_blank" rel="noreferrer" title="Открыть Google Trends">Trends ↗</a>}<button onClick={() => remove(item.id)} aria-label={`Удалить ${item.query}`}>×</button></td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
       )}
     </main>
   );
