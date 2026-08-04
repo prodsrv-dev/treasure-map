@@ -237,6 +237,7 @@ async function handleKeywordBoard(request: Request, env: Env, url: URL) {
       ["trendFiveYears", "trend_five_years"], ["trendTwelveMonths", "trend_twelve_months"],
       ["season", "season"], ["sourceUrl", "source_url"],
       ["visible", "visible"],
+      ["trendData", "trend_data"], ["translation", "translation"], ["category", "category"], ["intent", "intent"],
     ]);
     const sets: string[] = [];
     const values: unknown[] = [];
