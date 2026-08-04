@@ -66,6 +66,8 @@
 .header-add-form label span { color: #65736e; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .header-add-form input { width: 100%; height: 44px; border: 1px solid rgba(20, 39, 32, .22); background: white; color: #142720; padding: 8px 11px; font: inherit; }
 .header-add-form .board-primary { min-height: 44px; }
+.header-add-form .board-primary:disabled { cursor: wait; opacity: .7; }
+.header-submit-message { grid-column: 1 / -1; max-width: 620px; color: #9f3928; font-size: 11px; line-height: 1.3; }
 
 .board-stats {
   display: grid;

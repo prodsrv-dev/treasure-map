@@ -31,6 +31,7 @@ export const keywordQueries = sqliteTable("keyword_queries", {
   notes: text("notes").notNull().default(""),
   sourceUrl: text("source_url").notNull().default(""),
   trendData: text("trend_data").notNull().default(""),
+  visible: integer("visible").notNull().default(1),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

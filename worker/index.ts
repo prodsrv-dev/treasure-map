@@ -45,6 +45,7 @@ const createKeywordQueriesTable = `CREATE TABLE IF NOT EXISTS keyword_queries (
   notes TEXT NOT NULL DEFAULT '',
   source_url TEXT NOT NULL DEFAULT '',
   trend_data TEXT NOT NULL DEFAULT '',
+  visible INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 )`;
@@ -62,6 +63,7 @@ async function ensureKeywordQueriesTable(db: D1Database) {
     db.prepare("CREATE INDEX IF NOT EXISTS keyword_queries_category_idx ON keyword_queries (category)"),
   ]);
   try { await db.prepare("ALTER TABLE keyword_queries ADD COLUMN trend_data TEXT NOT NULL DEFAULT ''").run(); } catch { /* already added */ }
+  try { await db.prepare("ALTER TABLE keyword_queries ADD COLUMN visible INTEGER NOT NULL DEFAULT 1").run(); } catch { /* already added */ }
 }
 
 async function fetchTrendSeries(query: string, country: string, time: string) {
@@ -157,7 +159,7 @@ async function handleKeywordBoard(request: Request, env: Env, url: URL) {
   if (url.pathname === "/api/keyword-board" && request.method === "GET") {
     const rows = await env.DB.prepare(`SELECT id, query, translation, language, country, category, intent,
       trend_five_years AS trendFiveYears, trend_twelve_months AS trendTwelveMonths, season, status,
-      priority, notes, source_url AS sourceUrl, trend_data AS trendData, created_at AS createdAt, updated_at AS updatedAt
+      priority, notes, source_url AS sourceUrl, trend_data AS trendData, visible, created_at AS createdAt, updated_at AS updatedAt
       FROM keyword_queries ORDER BY
       CASE priority WHEN 'Высокий' THEN 1 WHEN 'Средний' THEN 2 ELSE 3 END,
       COALESCE(trend_twelve_months, -1) DESC, created_at DESC`).all();
@@ -186,7 +188,16 @@ async function handleKeywordBoard(request: Request, env: Env, url: URL) {
         .bind(id, query, translated.translation, translated.language, country, category, "Автоматически", indexFive, indexTwelve, season, "Проверено", priority, "Данные загружены автоматически из Google Trends", sourceUrl, JSON.stringify({ fiveYears, twelveMonths }), now, now).run();
       return json({ id }, 201);
     } catch (error) {
-      return json({ error: error instanceof Error ? `Не удалось получить Google Trends: ${error.message}` : "Не удалось исследовать запрос" }, 502);
+      try {
+        const translated = await translateToRussian(query);
+        const id = crypto.randomUUID(), now = Date.now();
+        const sourceUrl = `https://trends.google.com/trends/explore?date=today%205-y&geo=${encodeURIComponent(country)}&q=${encodeURIComponent(query)}`;
+        await env.DB.prepare(`INSERT INTO keyword_queries
+          (id, query, translation, language, country, category, intent, trend_five_years, trend_twelve_months, season, status, priority, notes, source_url, trend_data, visible, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, 'Общий спрос', 'Автоматически', NULL, NULL, 'Круглый год', 'К проверке', 'Средний', ?, ?, '', 1, ?, ?)`)
+          .bind(id, query, translated.translation, translated.language, country, `Запрос сохранён; Google Trends временно не вернул данные: ${error instanceof Error ? error.message : "ошибка источника"}`, sourceUrl, now, now).run();
+        return json({ id, warning: "Запрос добавлен, данные Google Trends будут получены позже" }, 202);
+      } catch { return json({ error: "Запрос уже существует или база временно недоступна" }, 409); }
     }
   }
 
@@ -225,6 +236,7 @@ async function handleKeywordBoard(request: Request, env: Env, url: URL) {
       ["status", "status"], ["priority", "priority"], ["notes", "notes"],
       ["trendFiveYears", "trend_five_years"], ["trendTwelveMonths", "trend_twelve_months"],
       ["season", "season"], ["sourceUrl", "source_url"],
+      ["visible", "visible"],
     ]);
     const sets: string[] = [];
     const values: unknown[] = [];

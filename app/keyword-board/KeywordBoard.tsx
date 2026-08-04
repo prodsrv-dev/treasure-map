@@ -18,6 +18,7 @@ type KeywordQuery = {
   notes: string;
   sourceUrl: string;
   trendData?: string;
+  visible?: number;
 };
 
 const initialKeywords = [
@@ -87,6 +88,7 @@ export default function KeywordBoard() {
   const [chartPeriod, setChartPeriod] = useState<"12m" | "5y">("12m");
   const [chartIds, setChartIds] = useState<string[]>([]);
   const [chartPreferenceLoaded, setChartPreferenceLoaded] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/keyword-board", { cache: "no-store" });
@@ -152,10 +154,12 @@ export default function KeywordBoard() {
     if (saved !== null) {
       try {
         const ids = JSON.parse(saved) as string[];
-        setChartIds(ids.filter(id => queries.some(item => item.id === id)).slice(0, 10));
+        const kept = ids.filter(id => queries.some(item => item.id === id)).slice(0, 10);
+        setChartIds(kept);
+        void Promise.all(queries.map(item => fetch(`/api/keyword-board/${item.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ visible: kept.includes(item.id) ? 1 : 0 }) })));
       } catch { setChartIds(queries.slice(0, 10).map(item => item.id)); }
     } else {
-      setChartIds(queries.slice(0, 10).map(item => item.id));
+      setChartIds(queries.filter(item => item.visible !== 0).slice(0, 10).map(item => item.id));
     }
     setChartPreferenceLoaded(true);
   }, [queries, chartPreferenceLoaded]);
@@ -168,21 +172,27 @@ export default function KeywordBoard() {
   const queryColors = useMemo(() => new Map(queries.map((item, index) => [item.id, chartColors[index % chartColors.length]])), [queries]);
 
   function toggleChartItem(id: string) {
-    setChartIds(current => current.includes(id) ? current.filter(value => value !== id) : current.length < 10 ? [...current, id] : current);
+    setChartIds(current => {
+      const next = current.includes(id) ? current.filter(value => value !== id) : current.length < 10 ? [...current, id] : current;
+      if (next !== current) void fetch(`/api/keyword-board/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ visible: next.includes(id) ? 1 : 0 }) });
+      return next;
+    });
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setMessage("");
+    if (submitting) return;
+    setSubmitting(true);
     setMessage("Получаем данные Google Trends…");
-    const response = await fetch("/api/keyword-board/research", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
-    });
-    const data = await response.json() as { error?: string };
-    if (!response.ok) return setMessage(data.error || "Не удалось сохранить запрос");
-    setForm(blankForm);
-    setMessage("Данные получены, запрос добавлен на доску");
-    await load();
+    try {
+      const response = await fetch("/api/keyword-board/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const data = await response.json() as { error?: string; warning?: string };
+      if (!response.ok) return setMessage(data.error || "Не удалось сохранить запрос");
+      setForm(blankForm);
+      setMessage(data.warning || "Данные получены, запрос добавлен на доску");
+      await load();
+    } catch { setMessage("Сеть не ответила. Попробуйте ещё раз."); }
+    finally { setSubmitting(false); }
   }
 
   async function update(id: string, changes: Partial<KeywordQuery>) {
@@ -208,7 +218,8 @@ export default function KeywordBoard() {
         <form className="header-add-form" onSubmit={submit}>
           <label><span>Запрос</span><input required value={form.query} onChange={e => setForm({ ...form, query: e.target.value })} placeholder="site blocker" /></label>
           <label className="country-input"><span>Страна</span><input required value={form.country} onChange={e => setForm({ ...form, country: e.target.value.toUpperCase() })} placeholder="US" /></label>
-          <button className="board-primary" type="submit">Добавить</button>
+          <button className="board-primary" type="submit" disabled={submitting}>{submitting ? "Получаем…" : "Добавить"}</button>
+          {message && <span className="header-submit-message">{message}</span>}
         </form>
       </header>
 
@@ -240,7 +251,6 @@ export default function KeywordBoard() {
         <span className="result-count">Показано {filtered.length} из {queries.length}</span>
       </section>
 
-      {message && <p className="board-message">{message}</p>}
       {loading ? <div className="board-empty">Загружаем исследование…</div> : filtered.length === 0 ? <div className="board-empty">По выбранным фильтрам запросов нет.</div> : (
         <div className="keyword-table-wrap">
           <table className="keyword-table" aria-label="Реестр поисковых запросов">
