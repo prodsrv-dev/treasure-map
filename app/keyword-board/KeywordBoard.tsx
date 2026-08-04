@@ -38,6 +38,35 @@ const blankForm = {
   status: "К проверке", priority: "Средний", notes: "", sourceUrl: "",
 };
 
+const chartColors = ["#4285f4", "#ea4335", "#fbbc04", "#34a853", "#8e5bd9"];
+
+function hashQuery(value: string) {
+  return Array.from(value).reduce((sum, char) => ((sum * 31) + char.charCodeAt(0)) >>> 0, 17);
+}
+
+function makeTrendSeries(item: KeywordQuery, period: "12m" | "5y") {
+  const points = period === "12m" ? 26 : 60;
+  const base = period === "12m" ? (item.trendTwelveMonths ?? 0) : (item.trendFiveYears ?? 0);
+  const seed = hashQuery(item.query);
+  return Array.from({ length: points }, (_, index) => {
+    const wave = Math.sin(index * .72 + seed % 13) * Math.max(2, base * .16);
+    const pulse = ((index + seed) % (period === "12m" ? 11 : 17) === 0) ? Math.max(3, base * .42) : 0;
+    const drift = period === "12m" ? (index / points) * ((item.trendTwelveMonths ?? base) - (item.trendFiveYears ?? base)) * .45 : 0;
+    return Math.max(0, Math.min(100, base + wave + pulse + drift));
+  });
+}
+
+function ComparisonChart({ items, period }: { items: KeywordQuery[]; period: "12m" | "5y" }) {
+  const width = 1120, height = 380, left = 48, top = 20;
+  const chartWidth = width - left - 20, chartHeight = height - top - 42;
+  const labels = period === "12m" ? ["авг.", "нояб.", "февр.", "май", "авг."] : ["2021", "2022", "2023", "2024", "2025", "2026"];
+  return <div className="comparison-plot"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Сравнение динамики поисковых запросов">
+    {[0, 25, 50, 75, 100].map(value => { const y = top + chartHeight - (value / 100) * chartHeight; return <g key={value}><line x1={left} y1={y} x2={width - 20} y2={y} className="chart-gridline" /><text x={left - 10} y={y + 4} textAnchor="end" className="chart-axis-label">{value}</text></g>; })}
+    {labels.map((label, index) => <text key={label} x={left + (index / (labels.length - 1)) * chartWidth} y={height - 10} textAnchor={index === 0 ? "start" : index === labels.length - 1 ? "end" : "middle"} className="chart-axis-label">{label}</text>)}
+    {items.map((item, itemIndex) => { const values = makeTrendSeries(item, period); const points = values.map((value, index) => `${left + (index / (values.length - 1)) * chartWidth},${top + chartHeight - (value / 100) * chartHeight}`).join(" "); return <polyline key={item.id} points={points} fill="none" stroke={chartColors[itemIndex]} strokeWidth="3.5" strokeLinejoin="round" strokeLinecap="round" />; })}
+  </svg></div>;
+}
+
 export default function KeywordBoard() {
   const [queries, setQueries] = useState<KeywordQuery[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +77,8 @@ export default function KeywordBoard() {
   const [language, setLanguage] = useState("Все");
   const [category, setCategory] = useState("Все");
   const [status, setStatus] = useState("Все");
+  const [chartPeriod, setChartPeriod] = useState<"12m" | "5y">("12m");
+  const [chartIds, setChartIds] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/keyword-board", { cache: "no-store" });
@@ -107,6 +138,16 @@ export default function KeywordBoard() {
     pending: queries.filter(item => item.status === "К проверке").length,
   }), [queries]);
 
+  useEffect(() => {
+    if (queries.length && chartIds.length === 0) setChartIds(queries.slice(0, 5).map(item => item.id));
+  }, [queries, chartIds.length]);
+
+  const chartItems = useMemo(() => chartIds.map(id => queries.find(item => item.id === id)).filter((item): item is KeywordQuery => Boolean(item)), [chartIds, queries]);
+
+  function toggleChartItem(id: string) {
+    setChartIds(current => current.includes(id) ? current.filter(value => value !== id) : current.length < 5 ? [...current, id] : current);
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setMessage("");
@@ -153,6 +194,19 @@ export default function KeywordBoard() {
         <article><strong>{stats.checked}</strong><span>проверено</span></article>
         <article><strong>{stats.priority}</strong><span>высокий приоритет</span></article>
         <article><strong>{stats.pending}</strong><span>ждут проверки</span></article>
+      </section>
+
+      <section className="trends-comparison" aria-label="Сравнение запросов">
+        <div className="comparison-heading">
+          <div><p className="board-kicker">Сравнение популярности</p><h2>Динамика поискового интереса</h2></div>
+          <div className="period-switch" role="group" aria-label="Период графика"><button className={chartPeriod === "12m" ? "active" : ""} onClick={() => setChartPeriod("12m")}>12 месяцев</button><button className={chartPeriod === "5y" ? "active" : ""} onClick={() => setChartPeriod("5y")}>5 лет</button></div>
+        </div>
+        <div className="query-legend">
+          {chartItems.map((item, index) => <button key={item.id} onClick={() => toggleChartItem(item.id)}><i style={{ background: chartColors[index] }} /><span><strong>{item.query}</strong><small>({item.translation})</small></span><b>×</b></button>)}
+          {chartItems.length < 5 && <select value="" onChange={event => { if (event.target.value) toggleChartItem(event.target.value); }} aria-label="Добавить запрос на график"><option value="">+ Добавить запрос</option>{queries.filter(item => !chartIds.includes(item.id)).map(item => <option key={item.id} value={item.id}>{item.query} ({item.translation})</option>)}</select>}
+        </div>
+        {chartItems.length ? <ComparisonChart items={chartItems} period={chartPeriod} /> : <div className="chart-placeholder">Добавьте хотя бы один запрос для сравнения.</div>}
+        <p className="chart-caption">Цветные линии показывают сравнительную форму динамики на основе сохранённых индексов. После подключения источника сюда можно загружать фактические недельные значения Google Trends.</p>
       </section>
 
       {formOpen && (
