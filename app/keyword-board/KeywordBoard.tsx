@@ -78,7 +78,6 @@ function ComparisonChart({ items, period, colorMap }: { items: KeywordQuery[]; p
 export default function KeywordBoard() {
   const [queries, setQueries] = useState<KeywordQuery[]>([]);
   const [loading, setLoading] = useState(true);
-  const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(blankForm);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
@@ -182,7 +181,6 @@ export default function KeywordBoard() {
     const data = await response.json() as { error?: string };
     if (!response.ok) return setMessage(data.error || "Не удалось сохранить запрос");
     setForm(blankForm);
-    setFormOpen(false);
     setMessage("Данные получены, запрос добавлен на доску");
     await load();
   }
@@ -207,9 +205,11 @@ export default function KeywordBoard() {
           <a href="/" className="board-brand">TREASURE MAP / RESEARCH</a>
           <h1>Доска поисковых запросов</h1>
         </div>
-        <button className="board-primary" onClick={() => setFormOpen(value => !value)}>
-          {formOpen ? "Закрыть форму" : "+ Добавить запрос"}
-        </button>
+        <form className="header-add-form" onSubmit={submit}>
+          <label><span>Запрос</span><input required value={form.query} onChange={e => setForm({ ...form, query: e.target.value })} placeholder="site blocker" /></label>
+          <label className="country-input"><span>Страна</span><input required value={form.country} onChange={e => setForm({ ...form, country: e.target.value.toUpperCase() })} placeholder="US" /></label>
+          <button className="board-primary" type="submit">Добавить</button>
+        </form>
       </header>
 
       <section className="board-stats" aria-label="Сводка доски">
@@ -232,15 +232,6 @@ export default function KeywordBoard() {
         <p className="chart-caption">Цветные линии показывают сравнительную форму динамики на основе сохранённых индексов. После подключения источника сюда можно загружать фактические недельные значения Google Trends.</p>
       </section>
 
-      {formOpen && (
-        <form className="keyword-form keyword-form-compact" onSubmit={submit}>
-          <div className="form-heading"><div><span>НОВОЕ ИССЛЕДОВАНИЕ</span><h2>Добавить поисковый запрос</h2></div><p>Укажите запрос и страну. Остальные данные система получит и заполнит сама.</p></div>
-          <label><span>Запрос</span><input required value={form.query} onChange={e => setForm({ ...form, query: e.target.value })} placeholder="site blocker" /></label>
-          <label><span>Страна</span><input required value={form.country} onChange={e => setForm({ ...form, country: e.target.value.toUpperCase() })} placeholder="US" /></label>
-          <div className="form-actions"><button type="submit">Получить данные и добавить</button><span>{message}</span></div>
-        </form>
-      )}
-
       <section className="board-toolbar" aria-label="Фильтры">
         <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Найти запрос или перевод" aria-label="Найти запрос" />
         <select value={language} onChange={e => setLanguage(e.target.value)} aria-label="Фильтр по языку"><option>Все</option><option>EN</option><option>ES</option><option>RU</option></select>
@@ -249,7 +240,7 @@ export default function KeywordBoard() {
         <span className="result-count">Показано {filtered.length} из {queries.length}</span>
       </section>
 
-      {message && !formOpen && <p className="board-message">{message}</p>}
+      {message && <p className="board-message">{message}</p>}
       {loading ? <div className="board-empty">Загружаем исследование…</div> : filtered.length === 0 ? <div className="board-empty">По выбранным фильтрам запросов нет.</div> : (
         <div className="keyword-table-wrap">
           <table className="keyword-table" aria-label="Реестр поисковых запросов">
