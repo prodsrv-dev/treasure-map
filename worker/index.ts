@@ -29,9 +29,37 @@ const createJobsTable = `CREATE TABLE IF NOT EXISTS riddle_jobs (
   updated_at INTEGER NOT NULL
 )`;
 
+const createKeywordQueriesTable = `CREATE TABLE IF NOT EXISTS keyword_queries (
+  id TEXT PRIMARY KEY NOT NULL,
+  query TEXT NOT NULL,
+  translation TEXT NOT NULL,
+  language TEXT NOT NULL,
+  country TEXT NOT NULL,
+  category TEXT NOT NULL,
+  intent TEXT NOT NULL,
+  trend_five_years INTEGER,
+  trend_twelve_months INTEGER,
+  season TEXT NOT NULL DEFAULT 'Круглый год',
+  status TEXT NOT NULL DEFAULT 'К проверке',
+  priority TEXT NOT NULL DEFAULT 'Средний',
+  notes TEXT NOT NULL DEFAULT '',
+  source_url TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)`;
+
 async function ensureJobsTable(db: D1Database) {
   await db.prepare(createJobsTable).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS riddle_jobs_status_created_idx ON riddle_jobs (status, created_at)").run();
+}
+
+async function ensureKeywordQueriesTable(db: D1Database) {
+  await db.batch([
+    db.prepare(createKeywordQueriesTable),
+    db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS keyword_queries_scope_idx ON keyword_queries (query, language, country)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS keyword_queries_status_priority_idx ON keyword_queries (status, priority)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS keyword_queries_category_idx ON keyword_queries (category)"),
+  ]);
 }
 
 function json(data: unknown, status = 200) {
@@ -92,6 +120,81 @@ async function handleRiddleQueue(request: Request, env: Env, url: URL) {
   return null;
 }
 
+async function handleKeywordBoard(request: Request, env: Env, url: URL) {
+  if (!env.DB) return json({ error: "Database is unavailable" }, 503);
+  await ensureKeywordQueriesTable(env.DB);
+
+  if (url.pathname === "/api/keyword-board" && request.method === "GET") {
+    const rows = await env.DB.prepare(`SELECT id, query, translation, language, country, category, intent,
+      trend_five_years AS trendFiveYears, trend_twelve_months AS trendTwelveMonths, season, status,
+      priority, notes, source_url AS sourceUrl, created_at AS createdAt, updated_at AS updatedAt
+      FROM keyword_queries ORDER BY
+      CASE priority WHEN 'Высокий' THEN 1 WHEN 'Средний' THEN 2 ELSE 3 END,
+      COALESCE(trend_twelve_months, -1) DESC, created_at DESC`).all();
+    return json({ queries: rows.results });
+  }
+
+  if (url.pathname === "/api/keyword-board" && request.method === "POST") {
+    const body = await request.json<Record<string, unknown>>();
+    const query = String(body.query || "").trim();
+    const translation = String(body.translation || "").trim();
+    if (!query || !translation) return json({ error: "Query and translation are required" }, 400);
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    try {
+      await env.DB.prepare(`INSERT INTO keyword_queries
+        (id, query, translation, language, country, category, intent, trend_five_years,
+         trend_twelve_months, season, status, priority, notes, source_url, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(
+          id, query, translation, String(body.language || "EN"), String(body.country || "US"),
+          String(body.category || "Карточки"), String(body.intent || "Информационный"),
+          body.trendFiveYears === null || body.trendFiveYears === "" ? null : Number(body.trendFiveYears),
+          body.trendTwelveMonths === null || body.trendTwelveMonths === "" ? null : Number(body.trendTwelveMonths),
+          String(body.season || "Круглый год"), String(body.status || "К проверке"),
+          String(body.priority || "Средний"), String(body.notes || ""), String(body.sourceUrl || ""), now, now
+        ).run();
+      return json({ id }, 201);
+    } catch (error) {
+      const message = error instanceof Error && error.message.includes("UNIQUE")
+        ? "Такой запрос уже есть для выбранного языка и страны"
+        : "Не удалось сохранить запрос";
+      return json({ error: message }, 409);
+    }
+  }
+
+  if (url.pathname.startsWith("/api/keyword-board/") && request.method === "PATCH") {
+    const id = url.pathname.split("/").pop();
+    const body = await request.json<Record<string, unknown>>();
+    const allowed = new Map([
+      ["status", "status"], ["priority", "priority"], ["notes", "notes"],
+      ["trendFiveYears", "trend_five_years"], ["trendTwelveMonths", "trend_twelve_months"],
+      ["season", "season"], ["sourceUrl", "source_url"],
+    ]);
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    for (const [key, column] of allowed) {
+      if (Object.prototype.hasOwnProperty.call(body, key)) {
+        sets.push(`${column} = ?`);
+        const value = body[key];
+        values.push((key.startsWith("trend") && (value === "" || value === null)) ? null : value);
+      }
+    }
+    if (!sets.length) return json({ error: "Nothing to update" }, 400);
+    sets.push("updated_at = ?");
+    values.push(Date.now(), id);
+    await env.DB.prepare(`UPDATE keyword_queries SET ${sets.join(", ")} WHERE id = ?`).bind(...values).run();
+    return json({ id, updated: true });
+  }
+
+  if (url.pathname.startsWith("/api/keyword-board/") && request.method === "DELETE") {
+    const id = url.pathname.split("/").pop();
+    await env.DB.prepare("DELETE FROM keyword_queries WHERE id = ?").bind(id).run();
+    return json({ id, deleted: true });
+  }
+
+  return null;
+}
+
 interface ExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
   passThroughOnException(): void;
@@ -106,6 +209,11 @@ interface ExecutionContext {
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname.startsWith("/api/keyword-board")) {
+      const response = await handleKeywordBoard(request, env, url);
+      if (response) return response;
+    }
 
     if (url.pathname.startsWith("/api/riddle-")) {
       const response = await handleRiddleQueue(request, env, url);
