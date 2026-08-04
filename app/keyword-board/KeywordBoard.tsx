@@ -17,6 +17,7 @@ type KeywordQuery = {
   priority: string;
   notes: string;
   sourceUrl: string;
+  trendData?: string;
 };
 
 const initialKeywords = [
@@ -45,6 +46,13 @@ function hashQuery(value: string) {
 }
 
 function makeTrendSeries(item: KeywordQuery, period: "12m" | "5y") {
+  if (item.trendData) {
+    try {
+      const stored = JSON.parse(item.trendData) as { fiveYears?: Array<{ value: number }>; twelveMonths?: Array<{ value: number }> };
+      const actual = period === "12m" ? stored.twelveMonths : stored.fiveYears;
+      if (actual?.length) return actual.map(point => point.value);
+    } catch { /* use the legacy index visualization */ }
+  }
   const points = period === "12m" ? 26 : 60;
   const base = period === "12m" ? (item.trendTwelveMonths ?? 0) : (item.trendFiveYears ?? 0);
   const seed = hashQuery(item.query);
@@ -152,14 +160,15 @@ export default function KeywordBoard() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setMessage("");
-    const response = await fetch("/api/keyword-board", {
+    setMessage("Получаем данные Google Trends…");
+    const response = await fetch("/api/keyword-board/research", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
     });
     const data = await response.json() as { error?: string };
     if (!response.ok) return setMessage(data.error || "Не удалось сохранить запрос");
     setForm(blankForm);
     setFormOpen(false);
-    setMessage("Запрос добавлен на доску");
+    setMessage("Данные получены, запрос добавлен на доску");
     await load();
   }
 
@@ -211,21 +220,11 @@ export default function KeywordBoard() {
       </section>
 
       {formOpen && (
-        <form className="keyword-form" onSubmit={submit}>
-          <div className="form-heading"><div><span>НОВАЯ КАРТОЧКА</span><h2>Добавить поисковый запрос</h2></div><p>Английский запрос обязательно сопровождаем русским переводом.</p></div>
-          <label className="wide"><span>Запрос</span><input required value={form.query} onChange={e => setForm({ ...form, query: e.target.value })} placeholder="birthday scavenger hunt" /></label>
-          <label className="wide"><span>Перевод</span><input required value={form.translation} onChange={e => setForm({ ...form, translation: e.target.value })} placeholder="поисковый квест ко дню рождения" /></label>
-          <label><span>Язык</span><select value={form.language} onChange={e => setForm({ ...form, language: e.target.value })}><option>EN</option><option>ES</option><option>RU</option></select></label>
-          <label><span>Страна</span><input value={form.country} onChange={e => setForm({ ...form, country: e.target.value.toUpperCase() })} /></label>
-          <label><span>Тип продукта</span><select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}><option>Карточки</option><option>День рождения</option><option>Сезонный набор</option><option>Персональный комплект</option><option>Персональная карта</option><option>Общий спрос</option></select></label>
-          <label><span>Намерение</span><select value={form.intent} onChange={e => setForm({ ...form, intent: e.target.value })}><option>Коммерческий</option><option>Информационный</option><option>Смешанный</option></select></label>
-          <label><span>Индекс за 5 лет</span><input type="number" min="0" max="100" value={form.trendFiveYears} onChange={e => setForm({ ...form, trendFiveYears: e.target.value })} /></label>
-          <label><span>Индекс за 12 месяцев</span><input type="number" min="0" max="100" value={form.trendTwelveMonths} onChange={e => setForm({ ...form, trendTwelveMonths: e.target.value })} /></label>
-          <label><span>Сезонность</span><input value={form.season} onChange={e => setForm({ ...form, season: e.target.value })} /></label>
-          <label><span>Приоритет</span><select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })}><option>Высокий</option><option>Средний</option><option>Низкий</option></select></label>
-          <label className="wide"><span>Ссылка Google Trends</span><input type="url" value={form.sourceUrl} onChange={e => setForm({ ...form, sourceUrl: e.target.value })} placeholder="https://trends.google.com/..." /></label>
-          <label className="wide"><span>Заметки</span><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Что показывает график, конкуренция, гипотеза страницы…" /></label>
-          <div className="wide form-actions"><button type="submit">Сохранить на доску</button><span>{message}</span></div>
+        <form className="keyword-form keyword-form-compact" onSubmit={submit}>
+          <div className="form-heading"><div><span>НОВОЕ ИССЛЕДОВАНИЕ</span><h2>Добавить поисковый запрос</h2></div><p>Укажите запрос и страну. Остальные данные система получит и заполнит сама.</p></div>
+          <label><span>Запрос</span><input required value={form.query} onChange={e => setForm({ ...form, query: e.target.value })} placeholder="site blocker" /></label>
+          <label><span>Страна</span><input required value={form.country} onChange={e => setForm({ ...form, country: e.target.value.toUpperCase() })} placeholder="US" /></label>
+          <div className="form-actions"><button type="submit">Получить данные и добавить</button><span>{message}</span></div>
         </form>
       )}
 

@@ -44,6 +44,7 @@ const createKeywordQueriesTable = `CREATE TABLE IF NOT EXISTS keyword_queries (
   priority TEXT NOT NULL DEFAULT 'Средний',
   notes TEXT NOT NULL DEFAULT '',
   source_url TEXT NOT NULL DEFAULT '',
+  trend_data TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 )`;
@@ -60,6 +61,35 @@ async function ensureKeywordQueriesTable(db: D1Database) {
     db.prepare("CREATE INDEX IF NOT EXISTS keyword_queries_status_priority_idx ON keyword_queries (status, priority)"),
     db.prepare("CREATE INDEX IF NOT EXISTS keyword_queries_category_idx ON keyword_queries (category)"),
   ]);
+  try { await db.prepare("ALTER TABLE keyword_queries ADD COLUMN trend_data TEXT NOT NULL DEFAULT ''").run(); } catch { /* already added */ }
+}
+
+async function fetchTrendSeries(query: string, country: string, time: string) {
+  const req = { comparisonItem: [{ keyword: query, geo: country, time }], category: 0, property: "" };
+  const exploreUrl = `https://trends.google.com/trends/api/explore?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(req))}`;
+  const exploreResponse = await fetch(exploreUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!exploreResponse.ok) throw new Error("Google Trends did not return comparison data");
+  const explore = JSON.parse((await exploreResponse.text()).replace(/^\)\]\}',?\s*/, ""));
+  const widget = explore.widgets?.find((item: { id?: string }) => item.id === "TIMESERIES");
+  if (!widget) throw new Error("Google Trends timeline is unavailable");
+  const dataUrl = `https://trends.google.com/trends/api/widgetdata/multiline?hl=en-US&tz=0&req=${encodeURIComponent(JSON.stringify(widget.request))}&token=${encodeURIComponent(widget.token)}`;
+  const dataResponse = await fetch(dataUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!dataResponse.ok) throw new Error("Google Trends did not return timeline values");
+  const data = JSON.parse((await dataResponse.text()).replace(/^\)\]\}',?\s*/, ""));
+  return (data.default?.timelineData || []).map((point: { time: string; value: number[]; formattedTime?: string }) => ({ time: Number(point.time), value: Number(point.value?.[0] || 0), label: point.formattedTime || "" }));
+}
+
+async function translateToRussian(query: string) {
+  try {
+    const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ru&dt=t&q=${encodeURIComponent(query)}`);
+    const data = await response.json() as unknown[][];
+    const chunks = Array.isArray(data[0]) ? (data[0] as unknown[][]).map(part => String(part[0] || "")).join("") : query;
+    return { translation: chunks || query, language: String(data[2] || "EN").toUpperCase() };
+  } catch { return { translation: query, language: "EN" }; }
+}
+
+function averageTrend(points: Array<{ value: number }>) {
+  return points.length ? Math.round(points.reduce((sum, point) => sum + point.value, 0) / points.length) : 0;
 }
 
 function json(data: unknown, status = 200) {
@@ -127,11 +157,37 @@ async function handleKeywordBoard(request: Request, env: Env, url: URL) {
   if (url.pathname === "/api/keyword-board" && request.method === "GET") {
     const rows = await env.DB.prepare(`SELECT id, query, translation, language, country, category, intent,
       trend_five_years AS trendFiveYears, trend_twelve_months AS trendTwelveMonths, season, status,
-      priority, notes, source_url AS sourceUrl, created_at AS createdAt, updated_at AS updatedAt
+      priority, notes, source_url AS sourceUrl, trend_data AS trendData, created_at AS createdAt, updated_at AS updatedAt
       FROM keyword_queries ORDER BY
       CASE priority WHEN 'Высокий' THEN 1 WHEN 'Средний' THEN 2 ELSE 3 END,
       COALESCE(trend_twelve_months, -1) DESC, created_at DESC`).all();
     return json({ queries: rows.results });
+  }
+
+  if (url.pathname === "/api/keyword-board/research" && request.method === "POST") {
+    const body = await request.json<{ query?: string; country?: string }>();
+    const query = String(body.query || "").trim();
+    const country = String(body.country || "US").trim().toUpperCase();
+    if (!query) return json({ error: "Укажите поисковый запрос" }, 400);
+    try {
+      const [fiveYears, twelveMonths, translated] = await Promise.all([
+        fetchTrendSeries(query, country, "today 5-y"), fetchTrendSeries(query, country, "today 12-m"), translateToRussian(query),
+      ]);
+      const lower = query.toLowerCase();
+      const category = lower.includes("birthday") ? "День рождения" : lower.includes("christmas") || lower.includes("easter") ? "Сезонный набор" : lower.includes("map") ? "Персональная карта" : lower.includes("print") || lower.includes("clue") ? "Карточки" : "Общий спрос";
+      const season = lower.includes("christmas") ? "Ноябрь–декабрь" : lower.includes("easter") ? "Февраль–апрель" : "Круглый год";
+      const indexFive = averageTrend(fiveYears), indexTwelve = averageTrend(twelveMonths);
+      const priority = indexTwelve >= 15 ? "Высокий" : indexTwelve >= 3 ? "Средний" : "Низкий";
+      const id = crypto.randomUUID(), now = Date.now();
+      const sourceUrl = `https://trends.google.com/trends/explore?date=today%205-y&geo=${encodeURIComponent(country)}&q=${encodeURIComponent(query)}`;
+      await env.DB.prepare(`INSERT INTO keyword_queries
+        (id, query, translation, language, country, category, intent, trend_five_years, trend_twelve_months, season, status, priority, notes, source_url, trend_data, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(id, query, translated.translation, translated.language, country, category, "Автоматически", indexFive, indexTwelve, season, "Проверено", priority, "Данные загружены автоматически из Google Trends", sourceUrl, JSON.stringify({ fiveYears, twelveMonths }), now, now).run();
+      return json({ id }, 201);
+    } catch (error) {
+      return json({ error: error instanceof Error ? `Не удалось получить Google Trends: ${error.message}` : "Не удалось исследовать запрос" }, 502);
+    }
   }
 
   if (url.pathname === "/api/keyword-board" && request.method === "POST") {

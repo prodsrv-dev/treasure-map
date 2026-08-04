@@ -185,6 +185,9 @@
 }
 
 .keyword-form .wide { grid-column: span 2; }
+.keyword-form-compact { grid-template-columns: minmax(320px, 2fr) 180px minmax(280px, 1fr); align-items: end; }
+.keyword-form-compact .form-heading { grid-column: 1 / -1; }
+.keyword-form-compact .form-actions { align-items: center; flex-wrap: wrap; }
 
 .form-actions {
   display: flex;

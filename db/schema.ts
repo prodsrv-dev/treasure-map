@@ -30,6 +30,7 @@ export const keywordQueries = sqliteTable("keyword_queries", {
   priority: text("priority").notNull().default("Средний"),
   notes: text("notes").notNull().default(""),
   sourceUrl: text("source_url").notNull().default(""),
+  trendData: text("trend_data").notNull().default(""),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
