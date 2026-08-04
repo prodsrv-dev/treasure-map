@@ -87,6 +87,7 @@ export default function KeywordBoard() {
   const [status, setStatus] = useState("Все");
   const [chartPeriod, setChartPeriod] = useState<"12m" | "5y">("12m");
   const [chartIds, setChartIds] = useState<string[]>([]);
+  const [chartPreferenceLoaded, setChartPreferenceLoaded] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/keyword-board", { cache: "no-store" });
@@ -147,8 +148,22 @@ export default function KeywordBoard() {
   }), [queries]);
 
   useEffect(() => {
-    if (queries.length && chartIds.length === 0) setChartIds(queries.slice(0, 10).map(item => item.id));
-  }, [queries, chartIds.length]);
+    if (!queries.length || chartPreferenceLoaded) return;
+    const saved = window.localStorage.getItem("keyword-board-visible-lines");
+    if (saved !== null) {
+      try {
+        const ids = JSON.parse(saved) as string[];
+        setChartIds(ids.filter(id => queries.some(item => item.id === id)).slice(0, 10));
+      } catch { setChartIds(queries.slice(0, 10).map(item => item.id)); }
+    } else {
+      setChartIds(queries.slice(0, 10).map(item => item.id));
+    }
+    setChartPreferenceLoaded(true);
+  }, [queries, chartPreferenceLoaded]);
+
+  useEffect(() => {
+    if (chartPreferenceLoaded) window.localStorage.setItem("keyword-board-visible-lines", JSON.stringify(chartIds));
+  }, [chartIds, chartPreferenceLoaded]);
 
   const chartItems = useMemo(() => chartIds.map(id => queries.find(item => item.id === id)).filter((item): item is KeywordQuery => Boolean(item)), [chartIds, queries]);
   const queryColors = useMemo(() => new Map(queries.map((item, index) => [item.id, chartColors[index % chartColors.length]])), [queries]);
