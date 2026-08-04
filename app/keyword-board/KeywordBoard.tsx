@@ -150,23 +150,9 @@ export default function KeywordBoard() {
 
   useEffect(() => {
     if (!queries.length || chartPreferenceLoaded) return;
-    const saved = window.localStorage.getItem("keyword-board-visible-lines");
-    if (saved !== null) {
-      try {
-        const ids = JSON.parse(saved) as string[];
-        const kept = ids.filter(id => queries.some(item => item.id === id)).slice(0, 10);
-        setChartIds(kept);
-        void Promise.all(queries.map(item => fetch(`/api/keyword-board/${item.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ visible: kept.includes(item.id) ? 1 : 0 }) })));
-      } catch { setChartIds(queries.slice(0, 10).map(item => item.id)); }
-    } else {
-      setChartIds(queries.filter(item => item.visible !== 0).slice(0, 10).map(item => item.id));
-    }
+    setChartIds(queries.filter(item => item.visible !== 0).slice(0, 10).map(item => item.id));
     setChartPreferenceLoaded(true);
   }, [queries, chartPreferenceLoaded]);
-
-  useEffect(() => {
-    if (chartPreferenceLoaded) window.localStorage.setItem("keyword-board-visible-lines", JSON.stringify(chartIds));
-  }, [chartIds, chartPreferenceLoaded]);
 
   const chartItems = useMemo(() => chartIds.map(id => queries.find(item => item.id === id)).filter((item): item is KeywordQuery => Boolean(item)), [chartIds, queries]);
   const queryColors = useMemo(() => new Map(queries.map((item, index) => [item.id, chartColors[index % chartColors.length]])), [queries]);
@@ -186,10 +172,11 @@ export default function KeywordBoard() {
     setMessage("Получаем данные Google Trends…");
     try {
       const response = await fetch("/api/keyword-board/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
-      const data = await response.json() as { error?: string; warning?: string };
+      const data = await response.json() as { id?: string; error?: string; warning?: string };
       if (!response.ok) return setMessage(data.error || "Не удалось сохранить запрос");
       setForm(blankForm);
       setMessage(data.warning || "Данные получены, запрос добавлен на доску");
+      if (data.id && !data.warning) setChartIds(current => current.includes(data.id!) ? current : [...current, data.id!].slice(-10));
       await load();
     } catch { setMessage("Сеть не ответила. Попробуйте ещё раз."); }
     finally { setSubmitting(false); }
