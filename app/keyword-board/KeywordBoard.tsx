@@ -205,9 +205,7 @@ export default function KeywordBoard() {
       <header className="keyword-board-header">
         <div>
           <a href="/" className="board-brand">TREASURE MAP / RESEARCH</a>
-          <p className="board-kicker">Семантическое исследование</p>
           <h1>Доска поисковых запросов</h1>
-          <p className="board-lead">Проверяем спрос, фиксируем перевод, сезонность и коммерческий потенциал каждого запроса.</p>
         </div>
         <button className="board-primary" onClick={() => setFormOpen(value => !value)}>
           {formOpen ? "Закрыть форму" : "+ Добавить запрос"}
@@ -215,10 +213,10 @@ export default function KeywordBoard() {
       </header>
 
       <section className="board-stats" aria-label="Сводка доски">
-        <article><strong>{stats.total}</strong><span>всего запросов</span></article>
+        <article><strong>{stats.total}</strong><span>всего</span></article>
         <article><strong>{stats.checked}</strong><span>проверено</span></article>
-        <article><strong>{stats.priority}</strong><span>высокий приоритет</span></article>
-        <article><strong>{stats.pending}</strong><span>ждут проверки</span></article>
+        <article><strong>{stats.priority}</strong><span>приоритетных</span></article>
+        <article><strong>{stats.pending}</strong><span>ожидают</span></article>
       </section>
 
       <section className="trends-comparison" aria-label="Сравнение запросов">

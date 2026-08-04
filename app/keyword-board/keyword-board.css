@@ -1,6 +1,6 @@
 .keyword-board-shell {
   min-height: 100vh;
-  padding: 48px clamp(20px, 4vw, 72px) 90px;
+  padding: 18px clamp(20px, 3vw, 48px) 70px;
   background: #f2efe7;
   color: #142720;
 }
@@ -9,14 +9,14 @@
   display: flex;
   justify-content: space-between;
   gap: 40px;
-  align-items: end;
-  padding-bottom: 34px;
+  align-items: center;
+  padding-bottom: 14px;
   border-bottom: 1px solid rgba(20, 39, 32, .24);
 }
 
 .board-brand {
   display: inline-block;
-  margin-bottom: 50px;
+  margin-bottom: 5px;
   color: #9f3928;
   font-size: 11px;
   font-weight: 800;
@@ -35,9 +35,9 @@
 .keyword-board-header h1 {
   max-width: 850px;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(44px, 6vw, 86px);
+  font-size: clamp(28px, 3vw, 42px);
   font-weight: 400;
-  line-height: .98;
+  line-height: 1.05;
 }
 
 .board-lead {
@@ -64,24 +64,24 @@
 .board-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  margin: 28px 0;
+  margin: 10px 0 18px;
   border-top: 1px solid rgba(20, 39, 32, .2);
   border-left: 1px solid rgba(20, 39, 32, .2);
 }
 
 .board-stats article {
-  display: grid;
-  gap: 6px;
-  min-height: 112px;
-  align-content: center;
+  display: flex;
+  gap: 8px;
+  min-height: 46px;
+  align-items: center;
   border-right: 1px solid rgba(20, 39, 32, .2);
   border-bottom: 1px solid rgba(20, 39, 32, .2);
-  padding: 18px 24px;
+  padding: 8px 14px;
 }
 
 .board-stats strong {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 38px;
+  font-size: 24px;
   font-weight: 400;
 }
 
