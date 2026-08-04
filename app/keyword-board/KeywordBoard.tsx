@@ -38,7 +38,7 @@ const blankForm = {
   status: "К проверке", priority: "Средний", notes: "", sourceUrl: "",
 };
 
-const chartColors = ["#4285f4", "#ea4335", "#fbbc04", "#34a853", "#8e5bd9"];
+const chartColors = ["#4285f4", "#ea4335", "#fbbc04", "#34a853", "#8e5bd9", "#00acc1", "#f57c00", "#7cb342", "#d81b60", "#546e7a"];
 
 function hashQuery(value: string) {
   return Array.from(value).reduce((sum, char) => ((sum * 31) + char.charCodeAt(0)) >>> 0, 17);
@@ -139,13 +139,13 @@ export default function KeywordBoard() {
   }), [queries]);
 
   useEffect(() => {
-    if (queries.length && chartIds.length === 0) setChartIds(queries.slice(0, 5).map(item => item.id));
+    if (queries.length && chartIds.length === 0) setChartIds(queries.slice(0, 10).map(item => item.id));
   }, [queries, chartIds.length]);
 
   const chartItems = useMemo(() => chartIds.map(id => queries.find(item => item.id === id)).filter((item): item is KeywordQuery => Boolean(item)), [chartIds, queries]);
 
   function toggleChartItem(id: string) {
-    setChartIds(current => current.includes(id) ? current.filter(value => value !== id) : current.length < 5 ? [...current, id] : current);
+    setChartIds(current => current.includes(id) ? current.filter(value => value !== id) : current.length < 10 ? [...current, id] : current);
   }
 
   async function submit(event: FormEvent) {
@@ -203,7 +203,7 @@ export default function KeywordBoard() {
         </div>
         <div className="query-legend">
           {chartItems.map((item, index) => <button key={item.id} onClick={() => toggleChartItem(item.id)}><i style={{ background: chartColors[index] }} /><span><strong>{item.query}</strong><small>({item.translation})</small></span><b>×</b></button>)}
-          {chartItems.length < 5 && <select value="" onChange={event => { if (event.target.value) toggleChartItem(event.target.value); }} aria-label="Добавить запрос на график"><option value="">+ Добавить запрос</option>{queries.filter(item => !chartIds.includes(item.id)).map(item => <option key={item.id} value={item.id}>{item.query} ({item.translation})</option>)}</select>}
+          {chartItems.length < 10 && <select value="" onChange={event => { if (event.target.value) toggleChartItem(event.target.value); }} aria-label="Добавить запрос на график"><option value="">+ Добавить запрос</option>{queries.filter(item => !chartIds.includes(item.id)).map(item => <option key={item.id} value={item.id}>{item.query} ({item.translation})</option>)}</select>}
         </div>
         {chartItems.length ? <ComparisonChart items={chartItems} period={chartPeriod} /> : <div className="chart-placeholder">Добавьте хотя бы один запрос для сравнения.</div>}
         <p className="chart-caption">Цветные линии показывают сравнительную форму динамики на основе сохранённых индексов. После подключения источника сюда можно загружать фактические недельные значения Google Trends.</p>
