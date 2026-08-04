@@ -56,14 +56,14 @@ function makeTrendSeries(item: KeywordQuery, period: "12m" | "5y") {
   });
 }
 
-function ComparisonChart({ items, period }: { items: KeywordQuery[]; period: "12m" | "5y" }) {
+function ComparisonChart({ items, period, colorMap }: { items: KeywordQuery[]; period: "12m" | "5y"; colorMap: Map<string, string> }) {
   const width = 1120, height = 380, left = 48, top = 20;
   const chartWidth = width - left - 20, chartHeight = height - top - 42;
   const labels = period === "12m" ? ["авг.", "нояб.", "февр.", "май", "авг."] : ["2021", "2022", "2023", "2024", "2025", "2026"];
   return <div className="comparison-plot"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Сравнение динамики поисковых запросов">
     {[0, 25, 50, 75, 100].map(value => { const y = top + chartHeight - (value / 100) * chartHeight; return <g key={value}><line x1={left} y1={y} x2={width - 20} y2={y} className="chart-gridline" /><text x={left - 10} y={y + 4} textAnchor="end" className="chart-axis-label">{value}</text></g>; })}
     {labels.map((label, index) => <text key={label} x={left + (index / (labels.length - 1)) * chartWidth} y={height - 10} textAnchor={index === 0 ? "start" : index === labels.length - 1 ? "end" : "middle"} className="chart-axis-label">{label}</text>)}
-    {items.map((item, itemIndex) => { const values = makeTrendSeries(item, period); const points = values.map((value, index) => `${left + (index / (values.length - 1)) * chartWidth},${top + chartHeight - (value / 100) * chartHeight}`).join(" "); return <polyline key={item.id} points={points} fill="none" stroke={chartColors[itemIndex]} strokeWidth="3.5" strokeLinejoin="round" strokeLinecap="round" />; })}
+    {items.map(item => { const values = makeTrendSeries(item, period); const points = values.map((value, index) => `${left + (index / (values.length - 1)) * chartWidth},${top + chartHeight - (value / 100) * chartHeight}`).join(" "); return <g key={item.id} className="trend-line"><polyline points={points} fill="none" stroke="transparent" strokeWidth="16"><title>{item.query} ({item.translation})</title></polyline><polyline points={points} fill="none" stroke={colorMap.get(item.id)} strokeWidth="3.5" strokeLinejoin="round" strokeLinecap="round" pointerEvents="none" /></g>; })}
   </svg></div>;
 }
 
@@ -143,6 +143,7 @@ export default function KeywordBoard() {
   }, [queries, chartIds.length]);
 
   const chartItems = useMemo(() => chartIds.map(id => queries.find(item => item.id === id)).filter((item): item is KeywordQuery => Boolean(item)), [chartIds, queries]);
+  const queryColors = useMemo(() => new Map(queries.map((item, index) => [item.id, chartColors[index % chartColors.length]])), [queries]);
 
   function toggleChartItem(id: string) {
     setChartIds(current => current.includes(id) ? current.filter(value => value !== id) : current.length < 10 ? [...current, id] : current);
@@ -202,10 +203,10 @@ export default function KeywordBoard() {
           <div className="period-switch" role="group" aria-label="Период графика"><button className={chartPeriod === "12m" ? "active" : ""} onClick={() => setChartPeriod("12m")}>12 месяцев</button><button className={chartPeriod === "5y" ? "active" : ""} onClick={() => setChartPeriod("5y")}>5 лет</button></div>
         </div>
         <div className="query-legend">
-          {chartItems.map((item, index) => <button key={item.id} onClick={() => toggleChartItem(item.id)}><i style={{ background: chartColors[index] }} /><span><strong>{item.query}</strong><small>({item.translation})</small></span><b>×</b></button>)}
+          {chartItems.map(item => <button key={item.id} onClick={() => toggleChartItem(item.id)}><i style={{ background: queryColors.get(item.id) }} /><span><strong>{item.query}</strong><small>({item.translation})</small></span><b>×</b></button>)}
           {chartItems.length < 10 && <select value="" onChange={event => { if (event.target.value) toggleChartItem(event.target.value); }} aria-label="Добавить запрос на график"><option value="">+ Добавить запрос</option>{queries.filter(item => !chartIds.includes(item.id)).map(item => <option key={item.id} value={item.id}>{item.query} ({item.translation})</option>)}</select>}
         </div>
-        {chartItems.length ? <ComparisonChart items={chartItems} period={chartPeriod} /> : <div className="chart-placeholder">Добавьте хотя бы один запрос для сравнения.</div>}
+        {chartItems.length ? <ComparisonChart items={chartItems} period={chartPeriod} colorMap={queryColors} /> : <div className="chart-placeholder">Добавьте хотя бы один запрос для сравнения.</div>}
         <p className="chart-caption">Цветные линии показывают сравнительную форму динамики на основе сохранённых индексов. После подключения источника сюда можно загружать фактические недельные значения Google Trends.</p>
       </section>
 
@@ -244,7 +245,7 @@ export default function KeywordBoard() {
             <tbody>{filtered.map(item => {
               const change = item.trendFiveYears !== null && item.trendTwelveMonths !== null ? item.trendTwelveMonths - item.trendFiveYears : null;
               return <tr key={item.id}>
-                <td className="query-cell"><strong>{item.query}</strong><span>({item.translation})</span></td>
+                <td className="query-cell"><div className="query-cell-main"><i style={{ background: queryColors.get(item.id) }} /><div><strong>{item.query}</strong><span>({item.translation})</span></div><button className={chartIds.includes(item.id) ? "line-eye visible" : "line-eye"} onClick={() => toggleChartItem(item.id)} title={chartIds.includes(item.id) ? "Скрыть линию" : "Показать линию"} aria-label={`${chartIds.includes(item.id) ? "Скрыть" : "Показать"} линию ${item.query}`}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg></button></div></td>
                 <td>{item.language} · {item.country}</td><td>{item.category}</td>
                 <td className="number-cell">{item.trendFiveYears ?? "—"}</td><td className="number-cell">{item.trendTwelveMonths ?? "—"}</td>
                 <td className={`number-cell ${change !== null && change > 0 ? "positive" : ""}`}>{change === null ? "—" : `${change >= 0 ? "+" : ""}${change}`}</td>

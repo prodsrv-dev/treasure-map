@@ -216,9 +216,16 @@
 .keyword-table th, .keyword-table td { border-right: 1px solid rgba(20, 39, 32, .11); border-bottom: 1px solid rgba(20, 39, 32, .11); padding: 9px 10px; vertical-align: middle; }
 .keyword-table tbody tr:hover { background: #f7f2e7; }
 .query-cell { width: 270px; }
+.query-cell-main { display: grid; grid-template-columns: 9px minmax(0, 1fr) 28px; gap: 9px; align-items: center; }
+.query-cell-main > i { width: 9px; height: 9px; border-radius: 50%; }
 .query-cell strong, .query-cell span { display: block; }
 .query-cell strong { margin-bottom: 3px; font-size: 14px; }
 .query-cell span { color: #71827b; font-size: 11px; }
+.line-eye { width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: #a9afac; cursor: pointer; line-height: 1; padding: 5px; }
+.line-eye.visible { color: #142720; }
+.line-eye:hover { background: #ece7dc; }
+.line-eye svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.trend-line { cursor: help; }
 .number-cell { text-align: center; font-family: Georgia, "Times New Roman", serif; font-size: 17px; }
 .number-cell.positive { color: #a73827; }
 .keyword-table select { width: 100%; min-width: 105px; min-height: 32px; border: 1px solid rgba(20, 39, 32, .2); background: white; color: #142720; padding: 4px 6px; font: inherit; }
