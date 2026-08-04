@@ -196,7 +196,7 @@ async function handleKeywordBoard(request: Request, env: Env, url: URL) {
           (id, query, translation, language, country, category, intent, trend_five_years, trend_twelve_months, season, status, priority, notes, source_url, trend_data, visible, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, 'Общий спрос', 'Автоматически', NULL, NULL, 'Круглый год', 'К проверке', 'Средний', ?, ?, '', 1, ?, ?)`)
           .bind(id, query, translated.translation, translated.language, country, `Запрос сохранён; Google Trends временно не вернул данные: ${error instanceof Error ? error.message : "ошибка источника"}`, sourceUrl, now, now).run();
-        return json({ id, warning: "Запрос добавлен, данные Google Trends будут получены позже" }, 202);
+        return json({ id, warning: "Запрос добавлен без графика: Google Trends заблокировал автоматическую выгрузку. Данные требуют ручного снятия." }, 202);
       } catch { return json({ error: "Запрос уже существует или база временно недоступна" }, 409); }
     }
   }
