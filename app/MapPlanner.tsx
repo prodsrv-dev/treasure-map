@@ -79,6 +79,12 @@ type LineSegment = {
 
 type DraftLine = Omit<LineSegment, "id">;
 
+type LineDragState = {
+  id: number;
+  start: PointPosition;
+  line: LineSegment;
+};
+
 type RouteArrow = {
   x: number;
   y: number;
@@ -1296,10 +1302,12 @@ export default function MapPlanner({
   const [outdoorMapMessage, setOutdoorMapMessage] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [draggingId, setDraggingId] = useState<PointId | null>(null);
+  const [draggingLineId, setDraggingLineId] = useState<number | null>(null);
   const [resizing, setResizing] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const nextLineId = useRef(1);
+  const lineDragState = useRef<LineDragState | null>(null);
   const resizeState = useRef<{
     axis: ResizeAxis;
     startX: number;
@@ -1878,6 +1886,44 @@ export default function MapPlanner({
     setDraftLine({ x1: start.x, y1: start.y, x2: start.x, y2: start.y });
   }
 
+  function startLineDrag(event: ReactPointerEvent<SVGPathElement>, line: LineSegment) {
+    if (event.button !== 0 || !boardRef.current || mode === "route" || mode === "split") return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const bounds = boardRef.current.getBoundingClientRect();
+    lineDragState.current = {
+      id: line.id,
+      start: pointerPosition(event, bounds),
+      line: { ...line },
+    };
+    setDraggingLineId(line.id);
+  }
+
+  function updateLineDrag(event: ReactPointerEvent) {
+    const drag = lineDragState.current;
+    if (!drag || !boardRef.current) return false;
+
+    const bounds = boardRef.current.getBoundingClientRect();
+    const pointer = pointerPosition(event, bounds);
+    const minX = Math.min(drag.line.x1, drag.line.x2);
+    const maxX = Math.max(drag.line.x1, drag.line.x2);
+    const minY = Math.min(drag.line.y1, drag.line.y2);
+    const maxY = Math.max(drag.line.y1, drag.line.y2);
+    const dx = clamp(pointer.x - drag.start.x, -minX, 100 - maxX);
+    const dy = clamp(pointer.y - drag.start.y, -minY, 100 - maxY);
+
+    setLines((current) => current.map((line) => line.id === drag.id ? {
+      ...line,
+      x1: drag.line.x1 + dx,
+      y1: drag.line.y1 + dy,
+      x2: drag.line.x2 + dx,
+      y2: drag.line.y2 + dy,
+    } : line));
+    return true;
+  }
+
   function updateLineFromPointer(event: ReactPointerEvent) {
     if (mode !== "lines" || !draftLine || !boardRef.current) return;
 
@@ -1893,6 +1939,7 @@ export default function MapPlanner({
 
   function handlePointerMove(event: ReactPointerEvent) {
     if (updateResize(event)) return;
+    if (updateLineDrag(event)) return;
     if (draftRoute && boardRef.current) {
       const bounds = boardRef.current.getBoundingClientRect();
       const point = pointerPosition(event, bounds);
@@ -1911,6 +1958,11 @@ export default function MapPlanner({
   }
 
   function finishPointerAction(event: ReactPointerEvent) {
+    if (lineDragState.current) {
+      lineDragState.current = null;
+      setDraggingLineId(null);
+      return;
+    }
     if (draftRoute && boardRef.current) {
       const bounds = boardRef.current.getBoundingClientRect();
       const end = pointerPosition(event, bounds);
@@ -1952,8 +2004,10 @@ export default function MapPlanner({
 
   function cancelPointerAction() {
     resizeState.current = null;
+    lineDragState.current = null;
     setResizing(false);
     setDraggingId(null);
+    setDraggingLineId(null);
     setDraftLine(null);
     setDraftRoute(null);
   }
@@ -2299,7 +2353,7 @@ export default function MapPlanner({
         </div>
 
         <div
-          className={`map-board mode-${mode}${isOutdoor ? " outdoor" : ""}${resizing ? " resizing" : ""}${adventureOpen ? " adventure-open" : ""}`}
+          className={`map-board mode-${mode}${isOutdoor ? " outdoor" : ""}${resizing ? " resizing" : ""}${draggingLineId !== null ? " dragging-line" : ""}${adventureOpen ? " adventure-open" : ""}`}
           id="map-front-export"
           ref={boardRef}
           style={{
@@ -2353,6 +2407,19 @@ export default function MapPlanner({
                 {wallPieces.map((piece) => (
                   piece.d ? <path d={piece.d} key={piece.id} /> : null
                 ))}
+              </g>
+              <g className="map-wall-handles">
+                {wallPieces.map((piece) => {
+                  const line = lines.find((candidate) => candidate.id === piece.id);
+                  return piece.d && line ? (
+                    <path
+                      className={draggingLineId === piece.id ? "map-wall-hit dragging" : "map-wall-hit"}
+                      d={piece.d}
+                      key={piece.id}
+                      onPointerDown={(event) => startLineDrag(event, line)}
+                    />
+                  ) : null;
+                })}
               </g>
             </g>
             {(adventureOpen || mode === "route" || mode === "split")

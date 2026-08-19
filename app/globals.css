@@ -1006,6 +1006,19 @@ h2 {
   stroke-linecap: round;
 }
 
+.map-wall-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 18;
+  pointer-events: stroke;
+  cursor: grab;
+}
+
+.map-wall-hit.dragging,
+.map-board.dragging-line {
+  cursor: grabbing;
+}
+
 .outdoor-context .outdoor-feature {
   vector-effect: non-scaling-stroke;
 }
