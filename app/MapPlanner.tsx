@@ -1303,8 +1303,10 @@ export default function MapPlanner({
   const [ready, setReady] = useState(false);
   const [draggingId, setDraggingId] = useState<PointId | null>(null);
   const [draggingLineId, setDraggingLineId] = useState<number | null>(null);
+  const [trashHover, setTrashHover] = useState(false);
   const [resizing, setResizing] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
+  const trashRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const nextLineId = useRef(1);
   const lineDragState = useRef<LineDragState | null>(null);
@@ -1737,6 +1739,7 @@ export default function MapPlanner({
   function updatePointFromPointer(event: ReactPointerEvent) {
     if (mode !== "points" || draggingId === null || !boardRef.current) return;
 
+    setTrashHover(isPointerOverTrash(event));
     const bounds = boardRef.current.getBoundingClientRect();
     const pointKey = String(draggingId);
     const isFinalPoint = pointKey === finalPlaceKey;
@@ -1768,6 +1771,30 @@ export default function MapPlanner({
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     setDraggingId(id);
+  }
+
+  function isPointerOverTrash(event: ReactPointerEvent) {
+    const bounds = trashRef.current?.getBoundingClientRect();
+    return Boolean(
+      bounds
+      && event.clientX >= bounds.left
+      && event.clientX <= bounds.right
+      && event.clientY >= bounds.top
+      && event.clientY <= bounds.bottom
+    );
+  }
+
+  function removePointFromMap(id: PointId) {
+    const pointKey = String(id);
+    invalidatePartition();
+    setPositions((current) => {
+      const next = { ...current };
+      delete next[pointKey];
+      if (pointKey === finalPlaceKey) {
+        delete next.treasure;
+      }
+      return next;
+    });
   }
 
   function movePointWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, id: PointId) {
@@ -1905,6 +1932,7 @@ export default function MapPlanner({
     const drag = lineDragState.current;
     if (!drag || !boardRef.current) return false;
 
+    setTrashHover(isPointerOverTrash(event));
     const bounds = boardRef.current.getBoundingClientRect();
     const pointer = pointerPosition(event, bounds);
     const minX = Math.min(drag.line.x1, drag.line.x2);
@@ -1959,8 +1987,19 @@ export default function MapPlanner({
 
   function finishPointerAction(event: ReactPointerEvent) {
     if (lineDragState.current) {
+      if (isPointerOverTrash(event)) {
+        const draggedLineId = lineDragState.current.id;
+        setLines((current) => current.filter((line) => line.id !== draggedLineId));
+      }
       lineDragState.current = null;
       setDraggingLineId(null);
+      setTrashHover(false);
+      return;
+    }
+    if (draggingId !== null && isPointerOverTrash(event)) {
+      removePointFromMap(draggingId);
+      setDraggingId(null);
+      setTrashHover(false);
       return;
     }
     if (draftRoute && boardRef.current) {
@@ -1998,6 +2037,7 @@ export default function MapPlanner({
     resizeState.current = null;
     setResizing(false);
     setDraggingId(null);
+    setTrashHover(false);
     setDraftLine(null);
     setDraftRoute(null);
   }
@@ -2008,6 +2048,7 @@ export default function MapPlanner({
     setResizing(false);
     setDraggingId(null);
     setDraggingLineId(null);
+    setTrashHover(false);
     setDraftLine(null);
     setDraftRoute(null);
   }
@@ -2353,7 +2394,7 @@ export default function MapPlanner({
         </div>
 
         <div
-          className={`map-board mode-${mode}${isOutdoor ? " outdoor" : ""}${resizing ? " resizing" : ""}${draggingLineId !== null ? " dragging-line" : ""}${adventureOpen ? " adventure-open" : ""}`}
+          className={`map-board mode-${mode}${isOutdoor ? " outdoor" : ""}${resizing ? " resizing" : ""}${draggingLineId !== null ? " dragging-line" : ""}${draggingId !== null || draggingLineId !== null ? " dragging-element" : ""}${adventureOpen ? " adventure-open" : ""}`}
           id="map-front-export"
           ref={boardRef}
           style={{
@@ -2542,6 +2583,14 @@ export default function MapPlanner({
               {" × "}
               {printMetrics.heightCm.toLocaleString("ru-RU", { maximumFractionDigits: 1 })} см
             </strong>
+          </div>
+          <div
+            className={`map-trash${trashHover ? " hover" : ""}`}
+            ref={trashRef}
+            aria-hidden="true"
+          >
+            <span>🗑</span>
+            <strong>{trashHover ? "Отпустите" : "Удалить"}</strong>
           </div>
           {isOutdoor && styled ? (
             <a
