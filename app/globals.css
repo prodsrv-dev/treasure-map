@@ -1451,6 +1451,12 @@ h2 {
   filter: saturate(0.72) sepia(0.16) contrast(0.96);
 }
 
+.map-point.generated-monster .map-monster-image,
+.map-point.generated-monster .map-final-monster-image,
+.monster-portrait .generated-monster-image {
+  mix-blend-mode: multiply;
+}
+
 .map-point.customized.final-composite {
   width: 100px;
   height: 157px;

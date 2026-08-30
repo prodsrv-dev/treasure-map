@@ -231,6 +231,7 @@ export default function RiddleDesigner({
               <div className="monster-art">
                 <div className="monster-portrait">
                   <img
+                    className={generatedMonster ? "generated-monster-image" : undefined}
                     src={generatedMonster || selectedMarker.image}
                     alt={`${entry.monster}. ${generatedMonster ? "Образ создан по фотографии" : selectedMarker.label}`}
                   />
