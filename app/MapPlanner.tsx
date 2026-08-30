@@ -32,6 +32,8 @@ type MapPlace = {
   id: number;
   first: string;
   second: string;
+  photoName: string;
+  photoDataUrl: string;
 };
 
 type PointPosition = {
@@ -59,6 +61,7 @@ type StoredMap = {
   seekerName: string;
   adventures: Record<string, AdventureEntry>;
   outdoorMap?: OutdoorMapState;
+  placeSignatures?: Record<string, string>;
 };
 
 type ResizeAxis = "x" | "y" | "xy";
@@ -68,6 +71,10 @@ const MIN_PARTITION_SEED_DISTANCE = 42;
 const PARTITION_VERSION = 4;
 type DrawingMode = "points" | "lines" | "route" | "style" | "split";
 type RouteStyle = "plain" | "arrows" | "footprints";
+
+function placeSignature(place: MapPlace) {
+  return [place.first.trim(), place.second.trim(), place.photoName].join("\u0001");
+}
 
 type LineSegment = {
   id: number;
@@ -1242,6 +1249,13 @@ function restoreMap(value: string | null): StoredMap | null {
         }),
       )
       : {};
+    const placeSignatures = stored.placeSignatures && typeof stored.placeSignatures === "object"
+      ? Object.fromEntries(
+        Object.entries(stored.placeSignatures).filter((entry): entry is [string, string] => (
+          typeof entry[1] === "string"
+        )),
+      )
+      : {};
 
     return {
       size: {
@@ -1264,6 +1278,7 @@ function restoreMap(value: string | null): StoredMap | null {
         : "",
       adventures,
       outdoorMap: restoreOutdoorMap(stored.outdoorMap),
+      placeSignatures,
     };
   } catch {
     return null;
@@ -1334,6 +1349,9 @@ export default function MapPlanner({
     return seeds;
   }, [finalPlace?.id, finalPosition, places, positions]);
   const totalPoints = places.length + 1;
+  const currentPlaceSignatures = useMemo(() => Object.fromEntries(
+    places.map((place) => [String(place.id), placeSignature(place)]),
+  ), [places]);
   const canPartition = partitionSeeds.length === totalPoints
     && partitionSeeds.length >= 2;
   const cutSegments = useMemo(
@@ -1413,11 +1431,17 @@ export default function MapPlanner({
     }
 
     if (stored) {
-      const restoredAdventures = { ...stored.adventures };
+      const validPlaceIds = new Set(places.map((place) => String(place.id)));
+      const restoredAdventures = Object.fromEntries(
+        Object.entries(stored.adventures).filter(([id]) => validPlaceIds.has(id)),
+      );
       places.forEach((place, index) => {
         const key = String(place.id);
         const suggested = createDefaultAdventure(place, index, locationType);
-        if (!restoredAdventures[key]) {
+        if (
+          !restoredAdventures[key]
+          || stored.placeSignatures?.[key] !== currentPlaceSignatures[key]
+        ) {
           restoredAdventures[key] = suggested;
         }
       });
@@ -1509,6 +1533,7 @@ export default function MapPlanner({
         seekerName,
         adventures,
         outdoorMap: isOutdoor ? outdoorMap : undefined,
+        placeSignatures: currentPlaceSignatures,
       }));
     } catch {
       // Storage can be disabled by browser privacy settings.
@@ -1530,6 +1555,7 @@ export default function MapPlanner({
     seekerName,
     size,
     styled,
+    currentPlaceSignatures,
   ]);
 
   useEffect(() => {
@@ -2643,7 +2669,8 @@ export default function MapPlanner({
             const marker = adventure
               ? markerCatalog.find((option) => option.id === adventure.marker)
               : null;
-            const markerScale = marker ? { "--marker-scale": marker.scale } : null;
+            const hasPhoto = Boolean(place.photoDataUrl);
+            const markerScale = marker && !hasPhoto ? { "--marker-scale": marker.scale } : null;
             const pointStyle: CSSProperties = position
               ? { left: `${position.x}%`, top: `${position.y}%`, ...markerScale } as CSSProperties
               : {
@@ -2656,7 +2683,7 @@ export default function MapPlanner({
 
             return (
               <button
-                className={`map-point${marker ? ` marker-${marker.id} customized` : ""}${isFinalPlace ? " final-monster final-composite" : ""}${position ? " placed" : " piled"}${draggingId === place.id ? " dragging" : ""}`}
+                className={`map-point${hasPhoto ? " photo-customized" : marker ? ` marker-${marker.id} customized` : ""}${isFinalPlace && !hasPhoto ? " final-monster final-composite" : ""}${position ? " placed" : " piled"}${draggingId === place.id ? " dragging" : ""}`}
                 type="button"
                 style={pointStyle}
                 aria-label={isFinalPlace ? `Финальная цель: ${name}` : name}
@@ -2666,7 +2693,14 @@ export default function MapPlanner({
                 onKeyDown={(event) => movePointWithKeyboard(event, place.id)}
                 key={place.id}
               >
-                {isFinalPlace && marker
+                {hasPhoto
+                  ? (
+                    <span className="map-photo-frame">
+                      <img src={place.photoDataUrl} alt="" draggable={false} />
+                      <b aria-hidden="true">{index + 1}</b>
+                    </span>
+                  )
+                  : isFinalPlace && marker
                   ? (
                     <>
                       <img

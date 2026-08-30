@@ -401,6 +401,24 @@ h2 {
   white-space: nowrap;
 }
 
+.photo-button.has-preview {
+  gap: 8px;
+}
+
+.photo-button img {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 1px solid rgba(41, 77, 67, 0.22);
+  object-fit: cover;
+}
+
+.photo-button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .photo-control input {
   width: 1px;
   height: 1px;
@@ -1405,6 +1423,44 @@ h2 {
   background: transparent;
   box-shadow: none;
   mix-blend-mode: normal;
+}
+
+.map-point.photo-customized {
+  width: 78px;
+  height: 88px;
+  z-index: 12;
+  overflow: visible;
+  border-radius: 0;
+  mix-blend-mode: normal;
+}
+
+.map-photo-frame {
+  width: 72px;
+  height: 80px;
+  position: relative;
+  display: block;
+  border: 5px solid rgba(247, 239, 220, 0.96);
+  border-bottom-width: 16px;
+  background: #e8dcc3;
+  box-shadow: 0 4px 9px rgba(50, 35, 20, 0.34);
+  transform: rotate(-2deg);
+  pointer-events: none;
+}
+
+.map-photo-frame img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  filter: saturate(0.82) sepia(0.08) contrast(0.96);
+}
+
+.map-photo-frame b {
+  position: absolute;
+  right: 2px;
+  bottom: -14px;
+  color: rgba(56, 41, 24, 0.8);
+  font: 700 11px/1 Georgia, serif;
 }
 
 .map-point.customized:hover,

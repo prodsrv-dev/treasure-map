@@ -10,6 +10,7 @@ type PlaceItem = {
   first: string;
   second: string;
   photoName: string;
+  photoDataUrl: string;
 };
 
 type LocationDraft = {
@@ -64,7 +65,46 @@ const locationCopy = {
 }>;
 
 function blankPlaces(): PlaceItem[] {
-  return [1, 2, 3].map((id) => ({ id, first: "", second: "", photoName: "" }));
+  return [1, 2, 3].map((id) => ({
+    id,
+    first: "",
+    second: "",
+    photoName: "",
+    photoDataUrl: "",
+  }));
+}
+
+function prepareMapPhoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Не удалось прочитать фотографию"));
+    reader.onload = () => {
+      const source = typeof reader.result === "string" ? reader.result : "";
+      if (!source) {
+        reject(new Error("Фотография пуста"));
+        return;
+      }
+
+      const image = new Image();
+      image.onerror = () => reject(new Error("Не удалось открыть фотографию"));
+      image.onload = () => {
+        const maxSide = 420;
+        const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const context = canvas.getContext("2d");
+        if (!context) {
+          resolve(source);
+          return;
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.76));
+      };
+      image.src = source;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function normalizePlaces(value: unknown): PlaceItem[] | null {
@@ -84,6 +124,10 @@ function normalizePlaces(value: unknown): PlaceItem[] | null {
         first: place.first,
         second: place.second,
         photoName: place.photoName,
+        photoDataUrl: typeof place.photoDataUrl === "string"
+          && place.photoDataUrl.startsWith("data:image/")
+          ? place.photoDataUrl
+          : "",
       }];
   });
 
@@ -94,6 +138,7 @@ function normalizePlaces(value: unknown): PlaceItem[] | null {
       first: "",
       second: "",
       photoName: "",
+      photoDataUrl: "",
     });
     nextAvailableId += 1;
   }
@@ -279,17 +324,37 @@ export default function LocationSetup() {
     setConfirmed(false);
   }
 
-  function updatePhoto(id: number, event: ChangeEvent<HTMLInputElement>) {
-    const photoName = event.target.files?.[0]?.name ?? "";
+  async function updatePhoto(id: number, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    const photoName = file?.name ?? "";
     setPlaces((current) => current.map((place) => (
-      place.id === id ? { ...place, photoName } : place
+      place.id === id ? { ...place, photoName, photoDataUrl: "" } : place
     )));
+    setConfirmed(false);
+
+    if (!file) return;
+    try {
+      const photoDataUrl = await prepareMapPhoto(file);
+      setPlaces((current) => current.map((place) => (
+        place.id === id ? { ...place, photoName, photoDataUrl } : place
+      )));
+    } catch {
+      setPlaces((current) => current.map((place) => (
+        place.id === id ? { ...place, photoName: "", photoDataUrl: "" } : place
+      )));
+    }
   }
 
   function addPlace() {
     const id = nextId.current;
     nextId.current += 1;
-    setPlaces((current) => [...current, { id, first: "", second: "", photoName: "" }]);
+    setPlaces((current) => [...current, {
+      id,
+      first: "",
+      second: "",
+      photoName: "",
+      photoDataUrl: "",
+    }]);
     setConfirmed(false);
   }
 
@@ -382,7 +447,10 @@ export default function LocationSetup() {
                   </label>
                   <label className="photo-control">
                     <span>Фото</span>
-                    <span className="photo-button">{place.photoName || "Добавить"}</span>
+                    <span className={`photo-button${place.photoDataUrl ? " has-preview" : ""}`}>
+                      {place.photoDataUrl ? <img src={place.photoDataUrl} alt="" /> : null}
+                      <span>{place.photoName || "Добавить"}</span>
+                    </span>
                     <input type="file" accept="image/*" capture="environment" onChange={(event) => updatePhoto(place.id, event)} />
                   </label>
                   {places.length > 3 ? (
