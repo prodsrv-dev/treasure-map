@@ -516,6 +516,16 @@ h2 {
   text-align: right;
 }
 
+.monster-queue-note {
+  margin: 10px 0 0;
+  border-left: 3px solid var(--gold);
+  background: rgba(213, 164, 57, 0.1);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 9px 12px;
+}
+
 .places-confirmed {
   margin: 20px 0 0;
   border-left: 3px solid var(--green);
@@ -1425,44 +1435,6 @@ h2 {
   mix-blend-mode: normal;
 }
 
-.map-point.photo-customized {
-  width: 78px;
-  height: 88px;
-  z-index: 12;
-  overflow: visible;
-  border-radius: 0;
-  mix-blend-mode: normal;
-}
-
-.map-photo-frame {
-  width: 72px;
-  height: 80px;
-  position: relative;
-  display: block;
-  border: 5px solid rgba(247, 239, 220, 0.96);
-  border-bottom-width: 16px;
-  background: #e8dcc3;
-  box-shadow: 0 4px 9px rgba(50, 35, 20, 0.34);
-  transform: rotate(-2deg);
-  pointer-events: none;
-}
-
-.map-photo-frame img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  filter: saturate(0.82) sepia(0.08) contrast(0.96);
-}
-
-.map-photo-frame b {
-  position: absolute;
-  right: 2px;
-  bottom: -14px;
-  color: rgba(56, 41, 24, 0.8);
-  font: 700 11px/1 Georgia, serif;
-}
-
 .map-point.customized:hover,
 .map-point.customized:focus-visible,
 .map-point.customized.dragging {
@@ -1726,6 +1698,15 @@ h2 {
   display: grid;
   grid-template-columns: repeat(3, 48px);
   gap: 7px;
+}
+
+.generated-monster-note {
+  grid-column: 2;
+  margin: 0;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .marker-choice {

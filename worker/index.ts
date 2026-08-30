@@ -5,6 +5,8 @@ import handler from "vinext/server/app-router-entry";
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  MONSTER_ASSETS: R2Bucket;
+  MONSTER_WORKER_SECRET?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -50,6 +52,22 @@ const createKeywordQueriesTable = `CREATE TABLE IF NOT EXISTS keyword_queries (
   updated_at INTEGER NOT NULL
 )`;
 
+const createMonsterJobsTable = `CREATE TABLE IF NOT EXISTS monster_jobs (
+  id TEXT PRIMARY KEY NOT NULL,
+  object_name TEXT NOT NULL,
+  location_name TEXT NOT NULL,
+  reference_key TEXT NOT NULL,
+  reference_type TEXT NOT NULL,
+  reference_name TEXT NOT NULL DEFAULT '',
+  result_key TEXT,
+  result_type TEXT,
+  monster_name TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)`;
+
 async function ensureJobsTable(db: D1Database) {
   await db.prepare(createJobsTable).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS riddle_jobs_status_created_idx ON riddle_jobs (status, created_at)").run();
@@ -64,6 +82,13 @@ async function ensureKeywordQueriesTable(db: D1Database) {
   ]);
   try { await db.prepare("ALTER TABLE keyword_queries ADD COLUMN trend_data TEXT NOT NULL DEFAULT ''").run(); } catch { /* already added */ }
   try { await db.prepare("ALTER TABLE keyword_queries ADD COLUMN visible INTEGER NOT NULL DEFAULT 1").run(); } catch { /* already added */ }
+}
+
+async function ensureMonsterJobsTable(db: D1Database) {
+  await db.batch([
+    db.prepare(createMonsterJobsTable),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_monster_jobs_pending ON monster_jobs (status, created_at) WHERE status = 'pending'"),
+  ]);
 }
 
 async function fetchTrendSeries(query: string, country: string, time: string) {
@@ -100,6 +125,157 @@ function json(data: unknown, status = 200) {
 
 function isLocalRequest(url: URL) {
   return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1";
+}
+
+function workerAuthorized(request: Request, env: Env, url: URL) {
+  if (isLocalRequest(url)) return true;
+  const secret = env.MONSTER_WORKER_SECRET;
+  if (!secret) return false;
+  const authorization = request.headers.get("authorization");
+  return authorization === `Bearer ${secret}`
+    || request.headers.get("x-monster-worker-secret") === secret;
+}
+
+function decodeImageDataUrl(value: string) {
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(value);
+  if (!match) throw new Error("Unsupported reference image");
+  const binary = atob(match[2]);
+  if (binary.length > 2_000_000) throw new Error("Reference image is too large");
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return { bytes, contentType: match[1] };
+}
+
+async function handleMonsterJobs(request: Request, env: Env, url: URL) {
+  if (!env.DB || !env.MONSTER_ASSETS) return json({ error: "Monster storage is unavailable" }, 503);
+  await ensureMonsterJobsTable(env.DB);
+
+  if (url.pathname === "/api/monster-jobs" && request.method === "POST") {
+    const body = await request.json<{
+      objectName?: string;
+      locationName?: string;
+      referenceName?: string;
+      photoDataUrl?: string;
+    }>();
+    const objectName = String(body.objectName || "").trim().slice(0, 120);
+    const locationName = String(body.locationName || "").trim().slice(0, 160);
+    const referenceName = String(body.referenceName || "").trim().slice(0, 180);
+    if (!objectName || !body.photoDataUrl) return json({ error: "Object and reference image are required" }, 400);
+
+    let decoded: ReturnType<typeof decodeImageDataUrl>;
+    try {
+      decoded = decodeImageDataUrl(body.photoDataUrl);
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Invalid image" }, 400);
+    }
+
+    const id = crypto.randomUUID();
+    const extension = decoded.contentType === "image/png" ? "png" : decoded.contentType === "image/webp" ? "webp" : "jpg";
+    const referenceKey = `monster-references/${id}.${extension}`;
+    const now = Date.now();
+    await env.MONSTER_ASSETS.put(referenceKey, decoded.bytes, {
+      httpMetadata: { contentType: decoded.contentType },
+      customMetadata: { objectName, locationName, referenceName },
+    });
+    await env.DB.prepare(`INSERT INTO monster_jobs
+      (id, object_name, location_name, reference_key, reference_type, reference_name, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).bind(
+        id, objectName, locationName, referenceKey, decoded.contentType, referenceName, now, now,
+      ).run();
+    return json({ id, status: "pending" }, 202);
+  }
+
+  if (url.pathname === "/api/monster-jobs" && request.method === "GET") {
+    const ids = (url.searchParams.get("ids") || "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean)
+      .slice(0, 30);
+    if (!ids.length) return json({ jobs: [] });
+    const placeholders = ids.map(() => "?").join(", ");
+    const rows = await env.DB.prepare(`SELECT id, status, monster_name AS monsterName, error, updated_at AS updatedAt
+      FROM monster_jobs WHERE id IN (${placeholders})`).bind(...ids).all<{
+        id: string;
+        status: "pending" | "completed" | "failed";
+        monsterName: string | null;
+        error: string | null;
+        updatedAt: number;
+      }>();
+    return json({
+      jobs: rows.results.map((row) => ({
+        ...row,
+        resultUrl: row.status === "completed" ? `/api/monster-assets/${row.id}?v=${row.updatedAt}` : undefined,
+      })),
+    });
+  }
+
+  if (url.pathname === "/api/monster-worker/pending" && request.method === "GET") {
+    if (!workerAuthorized(request, env, url)) return json({ error: "Worker authorization required" }, 401);
+    const rows = await env.DB.prepare(`SELECT id, object_name AS objectName, location_name AS locationName,
+      reference_name AS referenceName, reference_type AS referenceType
+      FROM monster_jobs WHERE status = 'pending' ORDER BY created_at ASC LIMIT 3`).all();
+    return json({
+      jobs: rows.results.map((row) => ({
+        ...row,
+        referenceUrl: `${url.origin}/api/monster-worker/jobs/${String(row.id)}/reference`,
+      })),
+    });
+  }
+
+  const workerReferenceMatch = url.pathname.match(/^\/api\/monster-worker\/jobs\/([^/]+)\/reference$/);
+  if (workerReferenceMatch && request.method === "GET") {
+    if (!workerAuthorized(request, env, url)) return json({ error: "Worker authorization required" }, 401);
+    const job = await env.DB.prepare("SELECT reference_key AS referenceKey, reference_type AS referenceType FROM monster_jobs WHERE id = ?")
+      .bind(workerReferenceMatch[1]).first<{ referenceKey: string; referenceType: string }>();
+    if (!job) return json({ error: "Job not found" }, 404);
+    const object = await env.MONSTER_ASSETS.get(job.referenceKey);
+    if (!object) return json({ error: "Reference not found" }, 404);
+    return new Response(object.body, {
+      headers: { "Content-Type": job.referenceType, "Cache-Control": "private, no-store" },
+    });
+  }
+
+  const workerJobMatch = url.pathname.match(/^\/api\/monster-worker\/jobs\/([^/]+)$/);
+  if (workerJobMatch && request.method === "PATCH") {
+    if (!workerAuthorized(request, env, url)) return json({ error: "Worker authorization required" }, 401);
+    const id = workerJobMatch[1];
+    const contentType = (request.headers.get("content-type") || "application/octet-stream").split(";")[0];
+    if (contentType === "application/json") {
+      const body = await request.json<{ error?: string }>();
+      await env.DB.prepare("UPDATE monster_jobs SET status = 'failed', error = ?, updated_at = ? WHERE id = ?")
+        .bind(String(body.error || "Generation failed").slice(0, 500), Date.now(), id).run();
+      return json({ id, status: "failed" });
+    }
+    if (!contentType.startsWith("image/")) return json({ error: "Generated image is required" }, 400);
+    const bytes = await request.arrayBuffer();
+    if (!bytes.byteLength || bytes.byteLength > 12_000_000) return json({ error: "Generated image is empty or too large" }, 400);
+    const extension = contentType === "image/webp" ? "webp" : contentType === "image/jpeg" ? "jpg" : "png";
+    const resultKey = `monster-results/${id}.${extension}`;
+    await env.MONSTER_ASSETS.put(resultKey, bytes, { httpMetadata: { contentType } });
+    await env.DB.prepare(`UPDATE monster_jobs SET status = 'completed', result_key = ?, result_type = ?,
+      monster_name = ?, error = NULL, updated_at = ? WHERE id = ?`).bind(
+        resultKey,
+        contentType,
+        decodeURIComponent(request.headers.get("x-monster-name") || "Монстр по референсу").slice(0, 120),
+        Date.now(),
+        id,
+      ).run();
+    return json({ id, status: "completed" });
+  }
+
+  const assetMatch = url.pathname.match(/^\/api\/monster-assets\/([^/]+)$/);
+  if (assetMatch && request.method === "GET") {
+    const job = await env.DB.prepare("SELECT result_key AS resultKey, result_type AS resultType FROM monster_jobs WHERE id = ? AND status = 'completed'")
+      .bind(assetMatch[1]).first<{ resultKey: string; resultType: string }>();
+    if (!job) return json({ error: "Generated monster not found" }, 404);
+    const object = await env.MONSTER_ASSETS.get(job.resultKey);
+    if (!object) return json({ error: "Generated monster image not found" }, 404);
+    return new Response(object.body, {
+      headers: { "Content-Type": job.resultType, "Cache-Control": "private, max-age=31536000, immutable" },
+    });
+  }
+
+  return null;
 }
 
 async function handleRiddleQueue(request: Request, env: Env, url: URL) {
@@ -286,6 +462,11 @@ const worker = {
 
     if (url.pathname.startsWith("/api/riddle-")) {
       const response = await handleRiddleQueue(request, env, url);
+      if (response) return response;
+    }
+
+    if (url.pathname.startsWith("/api/monster-")) {
+      const response = await handleMonsterJobs(request, env, url);
       if (response) return response;
     }
 

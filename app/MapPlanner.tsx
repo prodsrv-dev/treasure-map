@@ -34,6 +34,13 @@ type MapPlace = {
   second: string;
   photoName: string;
   photoDataUrl: string;
+  monsterJobId: string;
+  monsterSignature: string;
+};
+
+type MonsterJobState = {
+  status: "pending" | "completed" | "failed";
+  resultUrl?: string;
 };
 
 type PointPosition = {
@@ -1312,6 +1319,7 @@ export default function MapPlanner({
   const [exportPreview, setExportPreview] = useState(false);
   const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
   const [adventures, setAdventures] = useState<Record<string, AdventureEntry>>({});
+  const [monsterJobs, setMonsterJobs] = useState<Record<string, MonsterJobState>>({});
   const [outdoorMap, setOutdoorMap] = useState<OutdoorMapState>(createEmptyOutdoorMap);
   const [outdoorMapBusy, setOutdoorMapBusy] = useState(false);
   const [outdoorMapMessage, setOutdoorMapMessage] = useState<string | null>(null);
@@ -1352,6 +1360,15 @@ export default function MapPlanner({
   const currentPlaceSignatures = useMemo(() => Object.fromEntries(
     places.map((place) => [String(place.id), placeSignature(place)]),
   ), [places]);
+  const monsterImages = useMemo(() => Object.fromEntries(
+    places.flatMap((place) => {
+      if (!place.monsterJobId) return [];
+      const job = monsterJobs[place.monsterJobId];
+      return job?.status === "completed" && job.resultUrl
+        ? [[String(place.id), job.resultUrl]]
+        : [];
+    }),
+  ), [monsterJobs, places]);
   const canPartition = partitionSeeds.length === totalPoints
     && partitionSeeds.length >= 2;
   const cutSegments = useMemo(
@@ -1420,6 +1437,38 @@ export default function MapPlanner({
     : isOutdoor
       ? outdoorContourLabel
       : lineCountLabel;
+
+  useEffect(() => {
+    const jobIds = places.map((place) => place.monsterJobId).filter(Boolean);
+    if (!jobIds.length) return;
+
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/monster-jobs?ids=${encodeURIComponent(jobIds.join(","))}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error("monster status unavailable");
+        const payload = await response.json() as { jobs?: Array<MonsterJobState & { id: string }> };
+        if (stopped) return;
+        const next = Object.fromEntries((payload.jobs ?? []).map((job) => [job.id, job]));
+        setMonsterJobs((current) => ({ ...current, ...next }));
+        if ((payload.jobs ?? []).some((job) => job.status === "pending")) {
+          timer = setTimeout(poll, 10000);
+        }
+      } catch {
+        if (!stopped) timer = setTimeout(poll, 15000);
+      }
+    };
+
+    void poll();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [places]);
 
   useEffect(() => {
     let stored: StoredMap | null = null;
@@ -2669,8 +2718,8 @@ export default function MapPlanner({
             const marker = adventure
               ? markerCatalog.find((option) => option.id === adventure.marker)
               : null;
-            const hasPhoto = Boolean(place.photoDataUrl);
-            const markerScale = marker && !hasPhoto ? { "--marker-scale": marker.scale } : null;
+            const generatedMonster = monsterImages[String(place.id)];
+            const markerScale = marker ? { "--marker-scale": marker.scale } : null;
             const pointStyle: CSSProperties = position
               ? { left: `${position.x}%`, top: `${position.y}%`, ...markerScale } as CSSProperties
               : {
@@ -2683,7 +2732,7 @@ export default function MapPlanner({
 
             return (
               <button
-                className={`map-point${hasPhoto ? " photo-customized" : marker ? ` marker-${marker.id} customized` : ""}${isFinalPlace && !hasPhoto ? " final-monster final-composite" : ""}${position ? " placed" : " piled"}${draggingId === place.id ? " dragging" : ""}`}
+                className={`map-point${marker ? ` marker-${marker.id} customized` : ""}${generatedMonster ? " generated-monster" : ""}${isFinalPlace ? " final-monster final-composite" : ""}${position ? " placed" : " piled"}${draggingId === place.id ? " dragging" : ""}`}
                 type="button"
                 style={pointStyle}
                 aria-label={isFinalPlace ? `Финальная цель: ${name}` : name}
@@ -2693,19 +2742,12 @@ export default function MapPlanner({
                 onKeyDown={(event) => movePointWithKeyboard(event, place.id)}
                 key={place.id}
               >
-                {hasPhoto
-                  ? (
-                    <span className="map-photo-frame">
-                      <img src={place.photoDataUrl} alt="" draggable={false} />
-                      <b aria-hidden="true">{index + 1}</b>
-                    </span>
-                  )
-                  : isFinalPlace && marker
+                {isFinalPlace && (generatedMonster || marker)
                   ? (
                     <>
                       <img
                         className="map-final-monster-image"
-                        src={marker.image}
+                        src={generatedMonster || marker?.image}
                         alt=""
                         draggable={false}
                       />
@@ -2717,9 +2759,9 @@ export default function MapPlanner({
                       />
                     </>
                   )
-                  : marker
+                  : generatedMonster || marker
                   ? (
-                    <img className="map-monster-image" src={marker.image} alt="" draggable={false} />
+                    <img className="map-monster-image" src={generatedMonster || marker?.image} alt="" draggable={false} />
                   )
                   : (
                     <>
@@ -2776,6 +2818,7 @@ export default function MapPlanner({
           locationType={locationType}
           places={places}
           adventures={adventures}
+          monsterImages={monsterImages}
           onChange={setAdventures}
           onDistribute={openMapBack}
           canDistribute={canPartition}

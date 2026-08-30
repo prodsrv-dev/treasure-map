@@ -35,3 +35,19 @@ export const keywordQueries = sqliteTable("keyword_queries", {
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+export const monsterJobs = sqliteTable("monster_jobs", {
+  id: text("id").primaryKey(),
+  objectName: text("object_name").notNull(),
+  locationName: text("location_name").notNull(),
+  referenceKey: text("reference_key").notNull(),
+  referenceType: text("reference_type").notNull(),
+  referenceName: text("reference_name").notNull().default(""),
+  resultKey: text("result_key"),
+  resultType: text("result_type"),
+  monsterName: text("monster_name"),
+  status: text("status").notNull().default("pending"),
+  error: text("error"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});

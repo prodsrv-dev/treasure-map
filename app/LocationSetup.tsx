@@ -11,6 +11,8 @@ type PlaceItem = {
   second: string;
   photoName: string;
   photoDataUrl: string;
+  monsterJobId: string;
+  monsterSignature: string;
 };
 
 type LocationDraft = {
@@ -71,6 +73,8 @@ function blankPlaces(): PlaceItem[] {
     second: "",
     photoName: "",
     photoDataUrl: "",
+    monsterJobId: "",
+    monsterSignature: "",
   }));
 }
 
@@ -128,6 +132,8 @@ function normalizePlaces(value: unknown): PlaceItem[] | null {
           && place.photoDataUrl.startsWith("data:image/")
           ? place.photoDataUrl
           : "",
+        monsterJobId: typeof place.monsterJobId === "string" ? place.monsterJobId : "",
+        monsterSignature: typeof place.monsterSignature === "string" ? place.monsterSignature : "",
       }];
   });
 
@@ -139,6 +145,8 @@ function normalizePlaces(value: unknown): PlaceItem[] | null {
       second: "",
       photoName: "",
       photoDataUrl: "",
+      monsterJobId: "",
+      monsterSignature: "",
     });
     nextAvailableId += 1;
   }
@@ -192,6 +200,8 @@ export default function LocationSetup() {
   const [places, setPlaces] = useState<PlaceItem[]>(blankPlaces);
   const [confirmed, setConfirmed] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [preparingMonsters, setPreparingMonsters] = useState(false);
+  const [monsterQueueNote, setMonsterQueueNote] = useState("");
   const nextId = useRef(4);
   const locationDrafts = useRef<Partial<Record<LocationType, PlaceItem[]>>>({});
   const scrollRestored = useRef(false);
@@ -319,7 +329,9 @@ export default function LocationSetup() {
 
   function updatePlace(id: number, field: "first" | "second", value: string) {
     setPlaces((current) => current.map((place) => (
-      place.id === id ? { ...place, [field]: value } : place
+      place.id === id
+        ? { ...place, [field]: value, monsterJobId: "", monsterSignature: "" }
+        : place
     )));
     setConfirmed(false);
   }
@@ -328,7 +340,9 @@ export default function LocationSetup() {
     const file = event.target.files?.[0];
     const photoName = file?.name ?? "";
     setPlaces((current) => current.map((place) => (
-      place.id === id ? { ...place, photoName, photoDataUrl: "" } : place
+      place.id === id
+        ? { ...place, photoName, photoDataUrl: "", monsterJobId: "", monsterSignature: "" }
+        : place
     )));
     setConfirmed(false);
 
@@ -336,11 +350,15 @@ export default function LocationSetup() {
     try {
       const photoDataUrl = await prepareMapPhoto(file);
       setPlaces((current) => current.map((place) => (
-        place.id === id ? { ...place, photoName, photoDataUrl } : place
+        place.id === id
+          ? { ...place, photoName, photoDataUrl, monsterJobId: "", monsterSignature: "" }
+          : place
       )));
     } catch {
       setPlaces((current) => current.map((place) => (
-        place.id === id ? { ...place, photoName: "", photoDataUrl: "" } : place
+        place.id === id
+          ? { ...place, photoName: "", photoDataUrl: "", monsterJobId: "", monsterSignature: "" }
+          : place
       )));
     }
   }
@@ -354,6 +372,8 @@ export default function LocationSetup() {
       second: "",
       photoName: "",
       photoDataUrl: "",
+      monsterJobId: "",
+      monsterSignature: "",
     }]);
     setConfirmed(false);
   }
@@ -363,8 +383,49 @@ export default function LocationSetup() {
     setConfirmed(false);
   }
 
-  function continueToMap() {
+  async function continueToMap() {
+    if (!locationType || preparingMonsters) return;
+    setPreparingMonsters(true);
+    setMonsterQueueNote("");
+
+    let queuedCount = 0;
+    const updatedPlaces = await Promise.all(places.map(async (place) => {
+      if (!place.first.trim() || !place.second.trim() || !place.photoDataUrl) return place;
+
+      const signature = `${locationType}|${place.first.trim()}|${place.second.trim()}|${place.photoName}|${place.photoDataUrl.length}`;
+      if (place.monsterJobId && place.monsterSignature === signature) return place;
+
+      try {
+        const objectName = locationType === "apartment" ? place.second.trim() : place.first.trim();
+        const locationName = locationType === "apartment" ? place.first.trim() : place.second.trim();
+        const response = await fetch("/api/monster-jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            objectName,
+            locationName,
+            referenceName: place.photoName,
+            photoDataUrl: place.photoDataUrl,
+          }),
+        });
+        if (!response.ok) throw new Error("queue failed");
+        const payload = await response.json() as { id?: string };
+        if (!payload.id) throw new Error("job id missing");
+        queuedCount += 1;
+        return { ...place, monsterJobId: payload.id, monsterSignature: signature };
+      } catch {
+        return place;
+      }
+    }));
+
+    setPlaces(updatedPlaces);
+    if (queuedCount > 0) {
+      setMonsterQueueNote(
+        `${queuedCount} ${queuedCount === 1 ? "фото отправлено" : "фото отправлены"} Сфинксу как референс. На карте пока показаны базовые чудища — индивидуальные образы появятся автоматически.`,
+      );
+    }
     setConfirmed(true);
+    setPreparingMonsters(false);
     requestAnimationFrame(() => {
       document.getElementById("map-layout")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -480,10 +541,10 @@ export default function LocationSetup() {
               <button
                 className="continue-button"
                 type="button"
-                disabled={!canContinue}
+                disabled={!canContinue || preparingMonsters}
                 onClick={continueToMap}
               >
-                Продолжить
+                {preparingMonsters ? "Готовим референсы…" : "Продолжить"}
                 <span aria-hidden="true">→</span>
               </button>
             </div>
@@ -492,6 +553,7 @@ export default function LocationSetup() {
                 ? "Добавляйте столько мест, сколько нужно."
                 : "Чтобы продолжить, укажите имя искателя выше."}
             </p>
+            {monsterQueueNote ? <p className="monster-queue-note" role="status">{monsterQueueNote}</p> : null}
           </div>
         </section>
       ) : null}

@@ -162,6 +162,7 @@ export default function RiddleDesigner({
   locationType,
   places,
   adventures,
+  monsterImages,
   onChange,
   onDistribute,
   canDistribute,
@@ -169,6 +170,7 @@ export default function RiddleDesigner({
   locationType: LocationType;
   places: RiddlePlace[];
   adventures: Record<string, AdventureEntry>;
+  monsterImages: Record<string, string>;
   onChange: (next: Record<string, AdventureEntry>) => void;
   onDistribute: () => void;
   canDistribute: boolean;
@@ -216,6 +218,7 @@ export default function RiddleDesigner({
           const details = placeDetails(place, locationType);
           const selectedMarker = markerCatalog.find((marker) => marker.id === entry.marker)
             ?? markerCatalog[0];
+          const generatedMonster = monsterImages[String(place.id)];
 
           return (
             <article className="riddle-item" key={place.id}>
@@ -227,9 +230,15 @@ export default function RiddleDesigner({
 
               <div className="monster-art">
                 <div className="monster-portrait">
-                  <img src={selectedMarker.image} alt={`${entry.monster}. ${selectedMarker.label}`} />
+                  <img
+                    src={generatedMonster || selectedMarker.image}
+                    alt={`${entry.monster}. ${generatedMonster ? "Образ создан по фотографии" : selectedMarker.label}`}
+                  />
                 </div>
-                <div className="marker-picker" role="group" aria-label={`Образ чудовища для ${details.object}`}>
+                {generatedMonster ? (
+                  <p className="generated-monster-note">Образ создан по фотографии-референсу</p>
+                ) : null}
+                <div className="marker-picker" role="group" aria-label={`Базовый образ чудовища для ${details.object}`}>
                   {markerCatalog.map((marker) => (
                     <button
                       className={`marker-choice${entry.marker === marker.id ? " active" : ""}`}
