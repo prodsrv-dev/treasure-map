@@ -60,6 +60,7 @@ const createMonsterJobsTable = `CREATE TABLE IF NOT EXISTS monster_jobs (
   reference_key TEXT NOT NULL,
   reference_type TEXT NOT NULL,
   reference_name TEXT NOT NULL DEFAULT '',
+  source_hash TEXT,
   result_key TEXT,
   result_type TEXT,
   monster_name TEXT,
@@ -91,6 +92,7 @@ async function ensureMonsterJobsTable(db: D1Database) {
     db.prepare("CREATE INDEX IF NOT EXISTS idx_monster_jobs_pending ON monster_jobs (status, created_at) WHERE status = 'pending'"),
   ]);
   try { await db.prepare("ALTER TABLE monster_jobs ADD COLUMN asset_kind TEXT NOT NULL DEFAULT 'monster'").run(); } catch { /* already added */ }
+  try { await db.prepare("ALTER TABLE monster_jobs ADD COLUMN source_hash TEXT").run(); } catch { /* already added */ }
 }
 
 async function fetchTrendSeries(query: string, country: string, time: string) {
@@ -156,6 +158,97 @@ function pngHasAlphaChannel(bytes: ArrayBuffer) {
   return colorType === 4 || colorType === 6;
 }
 
+async function imageSourceHash(bytes: ArrayBuffer | Uint8Array) {
+  const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const digest = await crypto.subtle.digest("SHA-256", source);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+type ReusableMonsterJob = {
+  id: string;
+  status: "pending" | "completed";
+  sourceHash: string | null;
+  referenceKey: string;
+  resultKey: string | null;
+  resultType: string | null;
+  monsterName: string | null;
+};
+
+async function findReusableMonsterJob(
+  env: Env,
+  assetKind: string,
+  objectName: string,
+  locationName: string,
+  referenceName: string,
+  sourceHash: string,
+  excludeId = "",
+) {
+  const rows = await env.DB.prepare(`SELECT id, status, source_hash AS sourceHash, reference_key AS referenceKey,
+    result_key AS resultKey, result_type AS resultType, monster_name AS monsterName
+    FROM monster_jobs
+    WHERE asset_kind = ? AND object_name = ? AND location_name = ? AND reference_name = ?
+      AND status IN ('completed', 'pending') AND id != ?
+    ORDER BY CASE status WHEN 'completed' THEN 0 ELSE 1 END, updated_at DESC
+    LIMIT 12`).bind(assetKind, objectName, locationName, referenceName, excludeId).all<ReusableMonsterJob>();
+
+  for (const row of rows.results) {
+    let candidateHash = row.sourceHash;
+    if (!candidateHash) {
+      const reference = await env.MONSTER_ASSETS.get(row.referenceKey);
+      if (!reference) continue;
+      candidateHash = await imageSourceHash(await reference.arrayBuffer());
+      await env.DB.prepare("UPDATE monster_jobs SET source_hash = ? WHERE id = ?")
+        .bind(candidateHash, row.id).run();
+    }
+    if (candidateHash === sourceHash) return row;
+  }
+  return null;
+}
+
+async function reuseCompletedMonsterJob(env: Env, id: string) {
+  const row = await env.DB.prepare(`SELECT id, asset_kind AS assetKind, object_name AS objectName,
+    location_name AS locationName, reference_name AS referenceName, reference_key AS referenceKey,
+    source_hash AS sourceHash FROM monster_jobs WHERE id = ? AND status = 'pending'`).bind(id).first<{
+      id: string;
+      assetKind: string;
+      objectName: string;
+      locationName: string;
+      referenceName: string;
+      referenceKey: string;
+      sourceHash: string | null;
+    }>();
+  if (!row) return;
+
+  let sourceHash = row.sourceHash;
+  if (!sourceHash) {
+    const reference = await env.MONSTER_ASSETS.get(row.referenceKey);
+    if (!reference) return;
+    sourceHash = await imageSourceHash(await reference.arrayBuffer());
+    await env.DB.prepare("UPDATE monster_jobs SET source_hash = ? WHERE id = ?")
+      .bind(sourceHash, row.id).run();
+  }
+
+  const reusable = await findReusableMonsterJob(
+    env,
+    row.assetKind,
+    row.objectName,
+    row.locationName,
+    row.referenceName,
+    sourceHash,
+    row.id,
+  );
+  if (!reusable || reusable.status !== "completed" || !reusable.resultKey || !reusable.resultType) return;
+
+  await env.DB.prepare(`UPDATE monster_jobs SET status = 'completed', result_key = ?, result_type = ?,
+    monster_name = ?, error = NULL, updated_at = ? WHERE id = ?`).bind(
+      reusable.resultKey,
+      reusable.resultType,
+      reusable.monsterName,
+      Date.now(),
+      row.id,
+    ).run();
+}
+
 async function handleMonsterJobs(request: Request, env: Env, url: URL) {
   if (!env.DB || !env.MONSTER_ASSETS) return json({ error: "Monster storage is unavailable" }, 503);
   await ensureMonsterJobsTable(env.DB);
@@ -181,6 +274,19 @@ async function handleMonsterJobs(request: Request, env: Env, url: URL) {
       return json({ error: error instanceof Error ? error.message : "Invalid image" }, 400);
     }
 
+    const sourceHash = await imageSourceHash(decoded.bytes);
+    const reusable = await findReusableMonsterJob(
+      env,
+      assetKind,
+      objectName,
+      locationName,
+      referenceName,
+      sourceHash,
+    );
+    if (reusable) {
+      return json({ id: reusable.id, status: reusable.status, reused: true }, reusable.status === "completed" ? 200 : 202);
+    }
+
     const id = crypto.randomUUID();
     const extension = decoded.contentType === "image/png" ? "png" : decoded.contentType === "image/webp" ? "webp" : "jpg";
     const referenceKey = `monster-references/${id}.${extension}`;
@@ -190,9 +296,9 @@ async function handleMonsterJobs(request: Request, env: Env, url: URL) {
       customMetadata: { assetKind, objectName, locationName, referenceName },
     });
     await env.DB.prepare(`INSERT INTO monster_jobs
-      (id, asset_kind, object_name, location_name, reference_key, reference_type, reference_name, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).bind(
-        id, assetKind, objectName, locationName, referenceKey, decoded.contentType, referenceName, now, now,
+      (id, asset_kind, object_name, location_name, reference_key, reference_type, reference_name, source_hash, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).bind(
+        id, assetKind, objectName, locationName, referenceKey, decoded.contentType, referenceName, sourceHash, now, now,
       ).run();
     return json({ id, status: "pending" }, 202);
   }
@@ -204,6 +310,7 @@ async function handleMonsterJobs(request: Request, env: Env, url: URL) {
       .filter(Boolean)
       .slice(0, 30);
     if (!ids.length) return json({ jobs: [] });
+    await Promise.all(ids.map((id) => reuseCompletedMonsterJob(env, id)));
     const placeholders = ids.map(() => "?").join(", ");
     const rows = await env.DB.prepare(`SELECT id, status, monster_name AS monsterName, error, updated_at AS updatedAt
       FROM monster_jobs WHERE id IN (${placeholders})`).bind(...ids).all<{

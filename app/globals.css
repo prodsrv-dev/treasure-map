@@ -1543,6 +1543,21 @@ h2 {
   filter: saturate(0.86) sepia(0.1) contrast(0.98) drop-shadow(0 3px 3px rgba(57, 39, 18, 0.3));
 }
 
+.map-prize-placeholder {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin: 18px auto;
+  place-items: center;
+  border: 2px dashed rgba(104, 69, 27, 0.68);
+  border-radius: 50%;
+  background: rgba(247, 233, 196, 0.58);
+  color: rgba(104, 69, 27, 0.74);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+  font-weight: 700;
+}
+
 .map-prize-label {
   position: absolute;
   left: 50%;

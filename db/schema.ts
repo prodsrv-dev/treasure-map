@@ -44,6 +44,7 @@ export const monsterJobs = sqliteTable("monster_jobs", {
   referenceKey: text("reference_key").notNull(),
   referenceType: text("reference_type").notNull(),
   referenceName: text("reference_name").notNull().default(""),
+  sourceHash: text("source_hash"),
   resultKey: text("result_key"),
   resultType: text("result_type"),
   monsterName: text("monster_name"),

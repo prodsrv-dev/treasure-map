@@ -69,9 +69,14 @@ test("keeps the prize separate and rejects opaque generated images", async () =>
   assert.match(locationSetup, /assetKind: "prize"/);
   assert.match(planner, /onPointerDown=\{\(event\) => startPointDrag\(event, "prize"\)\}/);
   assert.match(planner, /map-prize-image/);
+  assert.match(planner, /map-prize-placeholder/);
+  assert.doesNotMatch(planner, /prizeImage \|\| "\/treasure-chest-map\.png"/);
   assert.doesNotMatch(planner, /final-monster final-composite/);
   assert.match(worker, /PNG must contain a real alpha channel/);
   assert.match(worker, /asset_kind AS assetKind/);
+  assert.match(worker, /findReusableMonsterJob/);
+  assert.match(worker, /reuseCompletedMonsterJob/);
+  assert.match(worker, /source_hash/);
 });
 
 test("reuses unchanged generated references and isolates newly added places", async () => {

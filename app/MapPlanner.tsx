@@ -2788,12 +2788,9 @@ export default function MapPlanner({
             onPointerDown={(event) => startPointDrag(event, "prize")}
             onKeyDown={(event) => movePointWithKeyboard(event, "prize")}
           >
-            <img
-              className="map-prize-image"
-              src={prizeImage || "/treasure-chest-map.png"}
-              alt=""
-              draggable={false}
-            />
+            {prizeImage
+              ? <img className="map-prize-image" src={prizeImage} alt="" draggable={false} />
+              : <span className="map-prize-placeholder" aria-hidden="true">?</span>}
             <span className="map-prize-label">Приз</span>
           </button>
 
