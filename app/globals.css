@@ -330,6 +330,70 @@ h2 {
   gap: 10px;
 }
 
+.prize-editor {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.35fr) minmax(190px, 0.9fr) minmax(150px, 0.7fr);
+  gap: 18px;
+  align-items: end;
+  margin-top: 18px;
+  border: 1px solid rgba(179, 126, 31, 0.42);
+  background: linear-gradient(135deg, rgba(246, 230, 187, 0.66), rgba(255, 255, 255, 0.9));
+  padding: 18px;
+}
+
+.prize-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.prize-kicker,
+.prize-editor label > span:first-child {
+  color: var(--red-dark);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.prize-copy h3 {
+  margin: 0;
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.prize-copy p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.prize-editor label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.prize-editor input:not([type="file"]) {
+  width: 100%;
+  height: 42px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+  padding: 0 2px;
+}
+
+.prize-editor input:not([type="file"]):focus {
+  border-bottom-color: var(--green);
+}
+
 .place-row {
   display: grid;
   grid-template-columns: 38px minmax(150px, 0.8fr) minmax(190px, 1fr) minmax(100px, 0.44fr) 32px;
@@ -1457,6 +1521,46 @@ h2 {
   mix-blend-mode: multiply;
 }
 
+.map-prize-point {
+  width: 92px;
+  height: 92px;
+  z-index: 13;
+  overflow: visible;
+  border-radius: 0;
+  mix-blend-mode: normal;
+}
+
+.map-prize-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: saturate(0.9) sepia(0.08) contrast(0.98) drop-shadow(0 3px 3px rgba(57, 39, 18, 0.3));
+  pointer-events: none;
+  user-select: none;
+}
+
+.map-prize-point.generated-prize .map-prize-image {
+  filter: saturate(0.86) sepia(0.1) contrast(0.98) drop-shadow(0 3px 3px rgba(57, 39, 18, 0.3));
+}
+
+.map-prize-label {
+  position: absolute;
+  left: 50%;
+  bottom: -13px;
+  border: 1px solid rgba(107, 70, 24, 0.46);
+  background: rgba(247, 233, 196, 0.9);
+  color: #74341f;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  padding: 3px 6px;
+  text-transform: uppercase;
+  transform: translateX(-50%) rotate(-2deg);
+  white-space: nowrap;
+}
+
 .map-point.customized.final-composite {
   width: 100px;
   height: 157px;
@@ -2251,6 +2355,14 @@ h2 {
 
   .place-row {
     grid-template-columns: 28px minmax(0, 1fr) 32px;
+  }
+
+  .prize-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .prize-photo-control {
+    grid-column: auto;
   }
 
   .place-row label {

@@ -38,6 +38,14 @@ type MapPlace = {
   monsterSignature: string;
 };
 
+type MapPrize = {
+  name: string;
+  photoName: string;
+  photoDataUrl: string;
+  imageJobId: string;
+  imageSignature: string;
+};
+
 type MonsterJobState = {
   status: "pending" | "completed" | "failed";
   resultUrl?: string;
@@ -72,7 +80,7 @@ type StoredMap = {
 };
 
 type ResizeAxis = "x" | "y" | "xy";
-type PointId = number | "start";
+type PointId = number | "start" | "prize";
 const FINAL_COMPOSITE_BOTTOM_GUARD = 110;
 const MIN_PARTITION_SEED_DISTANCE = 42;
 const PARTITION_VERSION = 4;
@@ -1295,10 +1303,12 @@ function restoreMap(value: string | null): StoredMap | null {
 export default function MapPlanner({
   locationType,
   places,
+  prize,
   seekerName,
 }: {
   locationType: LocationType;
   places: MapPlace[];
+  prize: MapPrize;
   seekerName: string;
 }) {
   const isOutdoor = locationType !== "apartment";
@@ -1341,22 +1351,19 @@ export default function MapPlanner({
     startHeight: number;
     displayScale: number;
   } | null>(null);
-  const finalPlace = places[places.length - 1];
-  const finalPlaceKey = finalPlace ? String(finalPlace.id) : null;
-  const finalPosition = finalPlaceKey
-    ? positions[finalPlaceKey] ?? positions.treasure
-    : positions.treasure;
+  const prizePosition = positions.prize;
   const partitionSeeds = useMemo<PartitionSeed[]>(() => {
     const seeds: PartitionSeed[] = [];
     if (positions.start) seeds.push({ id: "start", point: positions.start });
     places.forEach((place) => {
       const id = String(place.id);
-      const point = place.id === finalPlace?.id ? finalPosition : positions[id];
+      const point = positions[id];
       if (point) seeds.push({ id, point });
     });
+    if (prizePosition) seeds.push({ id: "prize", point: prizePosition });
     return seeds;
-  }, [finalPlace?.id, finalPosition, places, positions]);
-  const totalPoints = places.length + 1;
+  }, [places, positions, prizePosition]);
+  const totalPoints = places.length + 2;
   const currentPlaceSignatures = useMemo(() => Object.fromEntries(
     places.map((place) => [String(place.id), placeSignature(place)]),
   ), [places]);
@@ -1369,6 +1376,10 @@ export default function MapPlanner({
         : [];
     }),
   ), [monsterJobs, places]);
+  const prizeImage = prize.imageJobId
+    && monsterJobs[prize.imageJobId]?.status === "completed"
+    ? monsterJobs[prize.imageJobId]?.resultUrl
+    : undefined;
   const canPartition = partitionSeeds.length === totalPoints
     && partitionSeeds.length >= 2;
   const cutSegments = useMemo(
@@ -1383,10 +1394,10 @@ export default function MapPlanner({
   });
 
   const placedCount = useMemo(
-    () => places.filter((place) => (
-      place.id === finalPlace?.id ? finalPosition : positions[String(place.id)]
-    )).length + (positions.start ? 1 : 0),
-    [finalPlace?.id, finalPosition, places, positions],
+    () => places.filter((place) => positions[String(place.id)]).length
+      + (positions.start ? 1 : 0)
+      + (prizePosition ? 1 : 0),
+    [places, positions, prizePosition],
   );
   const routePoints = useMemo(() => {
     const anchored = (point: PointPosition | undefined, drop: number) => (
@@ -1394,17 +1405,15 @@ export default function MapPlanner({
     );
     return [
       anchored(positions.start, 24),
-      ...places.map((place) => anchored(
-        place.id === finalPlace?.id ? finalPosition : positions[String(place.id)],
-        place.id === finalPlace?.id ? 66 : 34,
-      )),
+      ...places.map((place) => anchored(positions[String(place.id)], 34)),
+      anchored(prizePosition, 52),
     ].filter((point): point is PointPosition => Boolean(point));
-  }, [finalPlace?.id, finalPosition, places, positions, size]);
+  }, [places, positions, prizePosition, size]);
   const routeLayouts = useMemo(() => (
     manualRoutes === null
-      ? [composeRoute(routePoints, lines, size, !finalPosition)]
+      ? [composeRoute(routePoints, lines, size, !prizePosition)]
       : manualRoutes.map((route) => composeDrawnRoute(route, lines, size))
-  ), [finalPosition, lines, manualRoutes, routePoints, size]);
+  ), [lines, manualRoutes, prizePosition, routePoints, size]);
   const wallPieces = useMemo(
     () => lines.map((line) => {
       const start = toPixels({ x: line.x1, y: line.y1 }, size);
@@ -1439,7 +1448,10 @@ export default function MapPlanner({
       : lineCountLabel;
 
   useEffect(() => {
-    const jobIds = places.map((place) => place.monsterJobId).filter(Boolean);
+    const jobIds = [
+      ...places.map((place) => place.monsterJobId),
+      prize.imageJobId,
+    ].filter(Boolean);
     if (!jobIds.length) return;
 
     let stopped = false;
@@ -1468,7 +1480,7 @@ export default function MapPlanner({
       stopped = true;
       if (timer) clearTimeout(timer);
     };
-  }, [places]);
+  }, [places, prize.imageJobId]);
 
   useEffect(() => {
     let stored: StoredMap | null = null;
@@ -1495,16 +1507,16 @@ export default function MapPlanner({
         }
       });
       const restoredPositions = { ...stored.positions };
-      if (finalPlaceKey) {
-        const restoredFinalPosition = restoredPositions[finalPlaceKey] ?? restoredPositions.treasure;
-        if (restoredFinalPosition) {
-          const fittedFinalPosition = {
-            ...restoredFinalPosition,
-            y: Math.min(restoredFinalPosition.y, finalPositionMaxY(stored.size.height)),
-          };
-          restoredPositions[finalPlaceKey] = fittedFinalPosition;
-          restoredPositions.treasure = fittedFinalPosition;
-        }
+      if (!restoredPositions.prize && restoredPositions.treasure) {
+        restoredPositions.prize = {
+          x: clamp(restoredPositions.treasure.x + 12, 3, 97),
+          y: clamp(restoredPositions.treasure.y + 10, 5, finalPositionMaxY(stored.size.height)),
+        };
+      } else if (restoredPositions.prize) {
+        restoredPositions.prize = {
+          ...restoredPositions.prize,
+          y: Math.min(restoredPositions.prize.y, finalPositionMaxY(stored.size.height)),
+        };
       }
       setSize(stored.size);
       setPositions(restoredPositions);
@@ -1512,6 +1524,7 @@ export default function MapPlanner({
       const validPartitionIds = new Set([
         "start",
         ...places.map((place) => String(place.id)),
+        "prize",
       ]);
       const restoredPartitionCells = stored.partitionCells.filter((cell) => validPartitionIds.has(cell.id));
       const restoredPartitionSeeds: PartitionSeed[] = [];
@@ -1520,11 +1533,12 @@ export default function MapPlanner({
       }
       places.forEach((place) => {
         const id = String(place.id);
-        const point = place.id === finalPlace?.id
-          ? restoredPositions[id] ?? restoredPositions.treasure
-          : restoredPositions[id];
+        const point = restoredPositions[id];
         if (point) restoredPartitionSeeds.push({ id, point });
       });
+      if (restoredPositions.prize) {
+        restoredPartitionSeeds.push({ id: "prize", point: restoredPositions.prize });
+      }
       const shouldMigratePartition = stored.partitionVersion !== PARTITION_VERSION
         && restoredPartitionSeeds.length === validPartitionIds.size;
       const migratedPartitionCells = shouldMigratePartition
@@ -1817,24 +1831,17 @@ export default function MapPlanner({
     setTrashHover(isPointerOverTrash(event));
     const bounds = boardRef.current.getBoundingClientRect();
     const pointKey = String(draggingId);
-    const isFinalPoint = pointKey === finalPlaceKey;
+    const isPrizePoint = pointKey === "prize";
     const nextPosition = {
       x: clamp(((event.clientX - bounds.left) / bounds.width) * 100, 3, 97),
       y: clamp(
         ((event.clientY - bounds.top) / bounds.height) * 100,
         5,
-        isFinalPoint ? finalPositionMaxY(size.height) : 95,
+        isPrizePoint ? finalPositionMaxY(size.height) : 95,
       ),
     };
     invalidatePartition();
     setPositions((current) => {
-      if (isFinalPoint && finalPlaceKey) {
-        return {
-          ...current,
-          [finalPlaceKey]: nextPosition,
-          treasure: nextPosition,
-        };
-      }
       return { ...current, [pointKey]: nextPosition };
     });
   }
@@ -1865,9 +1872,6 @@ export default function MapPlanner({
     setPositions((current) => {
       const next = { ...current };
       delete next[pointKey];
-      if (pointKey === finalPlaceKey) {
-        delete next.treasure;
-      }
       return next;
     });
   }
@@ -1876,14 +1880,10 @@ export default function MapPlanner({
     if (mode !== "points" || (isOutdoor && !outdoorMap.locked)) return;
 
     const pointKey = String(id);
-    const isFinalPoint = pointKey === finalPlaceKey;
+    const isPrizePoint = pointKey === "prize";
     const setPointPosition = (position: PointPosition) => {
       invalidatePartition();
-      setPositions((current) => (
-        isFinalPoint && finalPlaceKey
-          ? { ...current, [finalPlaceKey]: position, treasure: position }
-          : { ...current, [pointKey]: position }
-      ));
+      setPositions((current) => ({ ...current, [pointKey]: position }));
     };
     const direction = {
       ArrowLeft: [-2, 0],
@@ -1893,7 +1893,7 @@ export default function MapPlanner({
     }[event.key];
 
     if (!direction) {
-      const pointPosition = isFinalPoint ? finalPosition : positions[pointKey];
+      const pointPosition = positions[pointKey];
       if (event.key === "Enter" && !pointPosition) {
         event.preventDefault();
         setPointPosition({ x: 50, y: 50 });
@@ -1902,13 +1902,13 @@ export default function MapPlanner({
     }
 
     event.preventDefault();
-    const currentPosition = (isFinalPoint ? finalPosition : positions[pointKey]) ?? { x: 12, y: 16 };
+    const currentPosition = positions[pointKey] ?? { x: 12, y: 16 };
     setPointPosition({
       x: clamp(currentPosition.x + direction[0], 3, 97),
       y: clamp(
         currentPosition.y + direction[1],
         5,
-        isFinalPoint ? finalPositionMaxY(size.height) : 95,
+        isPrizePoint ? finalPositionMaxY(size.height) : 95,
       ),
     });
   }
@@ -2711,10 +2711,9 @@ export default function MapPlanner({
           </button>
 
           {places.map((place, index) => {
-            const isFinalPlace = place.id === finalPlace?.id;
-            const position = isFinalPlace ? finalPosition : positions[String(place.id)];
+            const position = positions[String(place.id)];
             const adventure = adventures[String(place.id)]
-              ?? (isFinalPlace ? createDefaultAdventure(place, index, locationType) : undefined);
+              ?? createDefaultAdventure(place, index, locationType);
             const marker = adventure
               ? markerCatalog.find((option) => option.id === adventure.marker)
               : null;
@@ -2723,7 +2722,7 @@ export default function MapPlanner({
             const pointStyle: CSSProperties = position
               ? { left: `${position.x}%`, top: `${position.y}%`, ...markerScale } as CSSProperties
               : {
-                "--pile-offset": `${isFinalPlace ? 80 + index * 7 : 49 + index * 7}px`,
+                "--pile-offset": `${49 + index * 7}px`,
                 "--pile-angle": `${(index - 1) * 4}deg`,
                 "--pile-z": 18 - index,
                 ...markerScale,
@@ -2732,34 +2731,17 @@ export default function MapPlanner({
 
             return (
               <button
-                className={`map-point${marker ? ` marker-${marker.id} customized` : ""}${generatedMonster ? " generated-monster" : ""}${isFinalPlace ? " final-monster final-composite" : ""}${position ? " placed" : " piled"}${draggingId === place.id ? " dragging" : ""}`}
+                className={`map-point${marker ? ` marker-${marker.id} customized` : ""}${generatedMonster ? " generated-monster" : ""}${position ? " placed" : " piled"}${draggingId === place.id ? " dragging" : ""}`}
                 type="button"
                 style={pointStyle}
-                aria-label={isFinalPlace ? `Финальная цель: ${name}` : name}
-                title={isFinalPlace ? `Финальная цель: ${name}` : name}
+                aria-label={name}
+                title={name}
                 tabIndex={mode === "points" ? 0 : -1}
                 onPointerDown={(event) => startPointDrag(event, place.id)}
                 onKeyDown={(event) => movePointWithKeyboard(event, place.id)}
                 key={place.id}
               >
-                {isFinalPlace && (generatedMonster || marker)
-                  ? (
-                    <>
-                      <img
-                        className="map-final-monster-image"
-                        src={generatedMonster || marker?.image}
-                        alt=""
-                        draggable={false}
-                      />
-                      <img
-                        className="map-final-treasure-image"
-                        src="/treasure-chest-map.png"
-                        alt=""
-                        draggable={false}
-                      />
-                    </>
-                  )
-                  : generatedMonster || marker
+                {generatedMonster || marker
                   ? (
                     <img className="map-monster-image" src={generatedMonster || marker?.image} alt="" draggable={false} />
                   )
@@ -2778,6 +2760,31 @@ export default function MapPlanner({
               </button>
             );
           })}
+
+          <button
+            className={`map-point map-prize-point${prizeImage ? " generated-prize" : ""}${prizePosition ? " placed" : " piled"}${draggingId === "prize" ? " dragging" : ""}`}
+            type="button"
+            style={prizePosition
+              ? { left: `${prizePosition.x}%`, top: `${prizePosition.y}%` }
+              : {
+                "--pile-offset": `${86 + places.length * 7}px`,
+                "--pile-angle": "8deg",
+                "--pile-z": 17 - places.length,
+              } as CSSProperties}
+            aria-label={`Приз: ${prize.name}`}
+            title={`Приз: ${prize.name}`}
+            tabIndex={mode === "points" ? 0 : -1}
+            onPointerDown={(event) => startPointDrag(event, "prize")}
+            onKeyDown={(event) => movePointWithKeyboard(event, "prize")}
+          >
+            <img
+              className="map-prize-image"
+              src={prizeImage || "/treasure-chest-map.png"}
+              alt=""
+              draggable={false}
+            />
+            <span className="map-prize-label">Приз</span>
+          </button>
 
           <button
             className="resize-edge resize-edge-right"
@@ -2830,6 +2837,7 @@ export default function MapPlanner({
           fragments={partitionCells}
           adventures={adventures}
           seekerName={seekerName}
+          prizeName={prize.name}
           onBack={closeMapBack}
           onExportStateChange={setExportPreview}
         />

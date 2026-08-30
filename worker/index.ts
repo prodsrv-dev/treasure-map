@@ -54,6 +54,7 @@ const createKeywordQueriesTable = `CREATE TABLE IF NOT EXISTS keyword_queries (
 
 const createMonsterJobsTable = `CREATE TABLE IF NOT EXISTS monster_jobs (
   id TEXT PRIMARY KEY NOT NULL,
+  asset_kind TEXT NOT NULL DEFAULT 'monster',
   object_name TEXT NOT NULL,
   location_name TEXT NOT NULL,
   reference_key TEXT NOT NULL,
@@ -89,6 +90,7 @@ async function ensureMonsterJobsTable(db: D1Database) {
     db.prepare(createMonsterJobsTable),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_monster_jobs_pending ON monster_jobs (status, created_at) WHERE status = 'pending'"),
   ]);
+  try { await db.prepare("ALTER TABLE monster_jobs ADD COLUMN asset_kind TEXT NOT NULL DEFAULT 'monster'").run(); } catch { /* already added */ }
 }
 
 async function fetchTrendSeries(query: string, country: string, time: string) {
@@ -146,18 +148,28 @@ function decodeImageDataUrl(value: string) {
   return { bytes, contentType: match[1] };
 }
 
+function pngHasAlphaChannel(bytes: ArrayBuffer) {
+  const data = new Uint8Array(bytes);
+  const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (data.length < 26 || !pngSignature.every((value, index) => data[index] === value)) return false;
+  const colorType = data[25];
+  return colorType === 4 || colorType === 6;
+}
+
 async function handleMonsterJobs(request: Request, env: Env, url: URL) {
   if (!env.DB || !env.MONSTER_ASSETS) return json({ error: "Monster storage is unavailable" }, 503);
   await ensureMonsterJobsTable(env.DB);
 
   if (url.pathname === "/api/monster-jobs" && request.method === "POST") {
     const body = await request.json<{
+      assetKind?: string;
       objectName?: string;
       locationName?: string;
       referenceName?: string;
       photoDataUrl?: string;
     }>();
     const objectName = String(body.objectName || "").trim().slice(0, 120);
+    const assetKind = body.assetKind === "prize" ? "prize" : "monster";
     const locationName = String(body.locationName || "").trim().slice(0, 160);
     const referenceName = String(body.referenceName || "").trim().slice(0, 180);
     if (!objectName || !body.photoDataUrl) return json({ error: "Object and reference image are required" }, 400);
@@ -175,12 +187,12 @@ async function handleMonsterJobs(request: Request, env: Env, url: URL) {
     const now = Date.now();
     await env.MONSTER_ASSETS.put(referenceKey, decoded.bytes, {
       httpMetadata: { contentType: decoded.contentType },
-      customMetadata: { objectName, locationName, referenceName },
+      customMetadata: { assetKind, objectName, locationName, referenceName },
     });
     await env.DB.prepare(`INSERT INTO monster_jobs
-      (id, object_name, location_name, reference_key, reference_type, reference_name, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).bind(
-        id, objectName, locationName, referenceKey, decoded.contentType, referenceName, now, now,
+      (id, asset_kind, object_name, location_name, reference_key, reference_type, reference_name, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).bind(
+        id, assetKind, objectName, locationName, referenceKey, decoded.contentType, referenceName, now, now,
       ).run();
     return json({ id, status: "pending" }, 202);
   }
@@ -211,7 +223,7 @@ async function handleMonsterJobs(request: Request, env: Env, url: URL) {
 
   if (url.pathname === "/api/monster-worker/pending" && request.method === "GET") {
     if (!workerAuthorized(request, env, url)) return json({ error: "Worker authorization required" }, 401);
-    const rows = await env.DB.prepare(`SELECT id, object_name AS objectName, location_name AS locationName,
+    const rows = await env.DB.prepare(`SELECT id, asset_kind AS assetKind, object_name AS objectName, location_name AS locationName,
       reference_name AS referenceName, reference_type AS referenceType
       FROM monster_jobs WHERE status = 'pending' ORDER BY created_at ASC LIMIT 3`).all();
     return json({
@@ -246,10 +258,13 @@ async function handleMonsterJobs(request: Request, env: Env, url: URL) {
         .bind(String(body.error || "Generation failed").slice(0, 500), Date.now(), id).run();
       return json({ id, status: "failed" });
     }
-    if (!contentType.startsWith("image/")) return json({ error: "Generated image is required" }, 400);
+    if (contentType !== "image/png") return json({ error: "Transparent PNG is required" }, 422);
     const bytes = await request.arrayBuffer();
     if (!bytes.byteLength || bytes.byteLength > 12_000_000) return json({ error: "Generated image is empty or too large" }, 400);
-    const extension = contentType === "image/webp" ? "webp" : contentType === "image/jpeg" ? "jpg" : "png";
+    if (!pngHasAlphaChannel(bytes)) {
+      return json({ error: "PNG must contain a real alpha channel" }, 422);
+    }
+    const extension = "png";
     const resultKey = `monster-results/${id}.${extension}`;
     await env.MONSTER_ASSETS.put(resultKey, bytes, { httpMetadata: { contentType } });
     await env.DB.prepare(`UPDATE monster_jobs SET status = 'completed', result_key = ?, result_type = ?,

@@ -15,11 +15,20 @@ type PlaceItem = {
   monsterSignature: string;
 };
 
+type PrizeItem = {
+  name: string;
+  photoName: string;
+  photoDataUrl: string;
+  imageJobId: string;
+  imageSignature: string;
+};
+
 type LocationDraft = {
   locationType: LocationType | null;
   seekerName: string;
   places: PlaceItem[];
   drafts: Partial<Record<LocationType, PlaceItem[]>>;
+  prize: PrizeItem;
   confirmed: boolean;
 };
 
@@ -76,6 +85,16 @@ function blankPlaces(): PlaceItem[] {
     monsterJobId: "",
     monsterSignature: "",
   }));
+}
+
+function blankPrize(): PrizeItem {
+  return {
+    name: "",
+    photoName: "",
+    photoDataUrl: "",
+    imageJobId: "",
+    imageSignature: "",
+  };
 }
 
 function prepareMapPhoto(file: File): Promise<string> {
@@ -154,6 +173,21 @@ function normalizePlaces(value: unknown): PlaceItem[] | null {
   return places;
 }
 
+function normalizePrize(value: unknown): PrizeItem {
+  if (!value || typeof value !== "object") return blankPrize();
+  const prize = value as Partial<PrizeItem>;
+  return {
+    name: typeof prize.name === "string" ? prize.name.slice(0, 120) : "",
+    photoName: typeof prize.photoName === "string" ? prize.photoName.slice(0, 180) : "",
+    photoDataUrl: typeof prize.photoDataUrl === "string"
+      && prize.photoDataUrl.startsWith("data:image/")
+      ? prize.photoDataUrl
+      : "",
+    imageJobId: typeof prize.imageJobId === "string" ? prize.imageJobId : "",
+    imageSignature: typeof prize.imageSignature === "string" ? prize.imageSignature : "",
+  };
+}
+
 function restoreDraft(value: string | null): LocationDraft | null {
   if (!value) return null;
 
@@ -162,6 +196,7 @@ function restoreDraft(value: string | null): LocationDraft | null {
       locationType?: unknown;
       places?: unknown;
       drafts?: Partial<Record<LocationType, unknown>>;
+      prize?: unknown;
       seekerName?: unknown;
       confirmed?: unknown;
     };
@@ -186,9 +221,11 @@ function restoreDraft(value: string | null): LocationDraft | null {
       ? draft.seekerName.slice(0, 40)
       : "";
     const confirmed = draft.confirmed === true
-      && places.filter((place) => place.first.trim() && place.second.trim()).length >= 3;
+      && places.filter((place) => place.first.trim() && place.second.trim()).length >= 3
+      && Boolean(normalizePrize(draft.prize).name.trim())
+      && Boolean(normalizePrize(draft.prize).photoDataUrl);
 
-    return { locationType, seekerName, places, drafts, confirmed };
+    return { locationType, seekerName, places, drafts, prize: normalizePrize(draft.prize), confirmed };
   } catch {
     return null;
   }
@@ -198,6 +235,7 @@ export default function LocationSetup() {
   const [locationType, setLocationType] = useState<LocationType | null>(null);
   const [seekerName, setSeekerName] = useState("");
   const [places, setPlaces] = useState<PlaceItem[]>(blankPlaces);
+  const [prize, setPrize] = useState<PrizeItem>(blankPrize);
   const [confirmed, setConfirmed] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
   const [preparingMonsters, setPreparingMonsters] = useState(false);
@@ -258,6 +296,7 @@ export default function LocationSetup() {
       setLocationType(draft.locationType);
       setSeekerName(restoredSeekerName);
       setPlaces(draft.places);
+      setPrize(draft.prize);
       setConfirmed(draft.confirmed && Boolean(restoredSeekerName.trim()));
       locationDrafts.current = draft.drafts;
       nextId.current = Math.max(0, ...draft.places.map((place) => place.id)) + 1;
@@ -294,19 +333,23 @@ export default function LocationSetup() {
         locationType,
         seekerName,
         drafts: locationDrafts.current,
+        prize,
         confirmed,
       }));
     } catch {
       // Storage can be disabled by browser privacy settings.
     }
-  }, [confirmed, draftRestored, locationType, places, seekerName]);
+  }, [confirmed, draftRestored, locationType, places, prize, seekerName]);
 
   const completedCount = useMemo(
     () => places.filter((place) => place.first.trim() && place.second.trim()).length,
     [places],
   );
   const hasMinimumPlaces = completedCount >= 3;
-  const canContinue = hasMinimumPlaces && Boolean(seekerName.trim());
+  const canContinue = hasMinimumPlaces
+    && Boolean(seekerName.trim())
+    && Boolean(prize.name.trim())
+    && Boolean(prize.photoDataUrl);
   const completedPlaces = useMemo(
     () => places.filter((place) => place.first.trim() && place.second.trim()),
     [places],
@@ -363,6 +406,39 @@ export default function LocationSetup() {
     }
   }
 
+  async function updatePrizePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    const photoName = file?.name ?? "";
+    setPrize((current) => ({
+      ...current,
+      photoName,
+      photoDataUrl: "",
+      imageJobId: "",
+      imageSignature: "",
+    }));
+    setConfirmed(false);
+
+    if (!file) return;
+    try {
+      const photoDataUrl = await prepareMapPhoto(file);
+      setPrize((current) => ({
+        ...current,
+        photoName,
+        photoDataUrl,
+        imageJobId: "",
+        imageSignature: "",
+      }));
+    } catch {
+      setPrize((current) => ({
+        ...current,
+        photoName: "",
+        photoDataUrl: "",
+        imageJobId: "",
+        imageSignature: "",
+      }));
+    }
+  }
+
   function addPlace() {
     const id = nextId.current;
     nextId.current += 1;
@@ -402,6 +478,7 @@ export default function LocationSetup() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            assetKind: "monster",
             objectName,
             locationName,
             referenceName: place.photoName,
@@ -418,10 +495,42 @@ export default function LocationSetup() {
       }
     }));
 
+    let updatedPrize = prize;
+    if (prize.name.trim() && prize.photoDataUrl) {
+      const signature = `${prize.name.trim()}|${prize.photoName}|${prize.photoDataUrl.length}`;
+      if (!prize.imageJobId || prize.imageSignature !== signature) {
+        try {
+          const response = await fetch("/api/monster-jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              assetKind: "prize",
+              objectName: prize.name.trim(),
+              locationName: "Финальный приз",
+              referenceName: prize.photoName,
+              photoDataUrl: prize.photoDataUrl,
+            }),
+          });
+          if (!response.ok) throw new Error("queue failed");
+          const payload = await response.json() as { id?: string };
+          if (!payload.id) throw new Error("job id missing");
+          updatedPrize = {
+            ...prize,
+            imageJobId: payload.id,
+            imageSignature: signature,
+          };
+          queuedCount += 1;
+        } catch {
+          updatedPrize = prize;
+        }
+      }
+    }
+
     setPlaces(updatedPlaces);
+    setPrize(updatedPrize);
     if (queuedCount > 0) {
       setMonsterQueueNote(
-        `${queuedCount} ${queuedCount === 1 ? "фото отправлено" : "фото отправлены"} Сфинксу как референс. На карте пока показаны базовые чудища — индивидуальные образы появятся автоматически.`,
+        `${queuedCount} ${queuedCount === 1 ? "фото отправлено" : "фото отправлены"} Сфинксу как референс. Чудища и отдельный образ приза появятся на карте автоматически.`,
       );
     }
     setConfirmed(true);
@@ -529,6 +638,39 @@ export default function LocationSetup() {
               ))}
             </div>
 
+            <section className="prize-editor" aria-labelledby="prize-title">
+              <div className="prize-copy">
+                <span className="prize-kicker">Финал приключения</span>
+                <h3 id="prize-title">Что будет искать ребёнок?</h3>
+                <p>Сфотографируйте настоящий приз. По фото появится отдельная иллюстрация, которую можно свободно поставить на карте.</p>
+              </div>
+              <label>
+                <span>Название приза</span>
+                <input
+                  value={prize.name}
+                  maxLength={120}
+                  placeholder="Например, набор LEGO"
+                  onChange={(event) => {
+                    setPrize((current) => ({
+                      ...current,
+                      name: event.target.value,
+                      imageJobId: "",
+                      imageSignature: "",
+                    }));
+                    setConfirmed(false);
+                  }}
+                />
+              </label>
+              <label className="photo-control prize-photo-control">
+                <span>Фото приза</span>
+                <span className={`photo-button${prize.photoDataUrl ? " has-preview" : ""}`}>
+                  {prize.photoDataUrl ? <img src={prize.photoDataUrl} alt="" /> : null}
+                  <span>{prize.photoName || "Сфотографировать"}</span>
+                </span>
+                <input type="file" accept="image/*" capture="environment" onChange={updatePrizePhoto} />
+              </label>
+            </section>
+
             <div className="places-footer">
               <div className="places-progress" aria-live="polite">
                 <strong>{hasMinimumPlaces ? `${completedCount} мест` : `${completedCount} из 3`}</strong>
@@ -550,7 +692,9 @@ export default function LocationSetup() {
             </div>
             <p className="places-limit">
               {seekerName.trim()
-                ? "Добавляйте столько мест, сколько нужно."
+                ? prize.name.trim() && prize.photoDataUrl
+                  ? "Добавляйте столько мест, сколько нужно."
+                  : "Чтобы продолжить, укажите приз и добавьте его фотографию."
                 : "Чтобы продолжить, укажите имя искателя выше."}
             </p>
             {monsterQueueNote ? <p className="monster-queue-note" role="status">{monsterQueueNote}</p> : null}
@@ -562,6 +706,7 @@ export default function LocationSetup() {
         <MapPlanner
           locationType={locationType}
           places={completedPlaces}
+          prize={prize}
           seekerName={seekerName.trim()}
           key={locationType}
         />

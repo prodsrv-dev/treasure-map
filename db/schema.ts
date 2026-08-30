@@ -38,6 +38,7 @@ export const keywordQueries = sqliteTable("keyword_queries", {
 
 export const monsterJobs = sqliteTable("monster_jobs", {
   id: text("id").primaryKey(),
+  assetKind: text("asset_kind").notNull().default("monster"),
   objectName: text("object_name").notNull(),
   locationName: text("location_name").notNull(),
   referenceKey: text("reference_key").notNull(),

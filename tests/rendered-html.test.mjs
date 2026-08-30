@@ -57,3 +57,19 @@ test("keeps apartment and outdoor map-building flows separate", async () => {
   assert.match(outdoorLayer, /nominatim\.openstreetmap\.org/);
   assert.match(packageJson, /"leaflet"/);
 });
+
+test("keeps the prize separate and rejects opaque generated images", async () => {
+  const [locationSetup, planner, worker] = await Promise.all([
+    readFile(new URL("../app/LocationSetup.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/MapPlanner.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(locationSetup, /Что будет искать ребёнок\?/);
+  assert.match(locationSetup, /assetKind: "prize"/);
+  assert.match(planner, /onPointerDown=\{\(event\) => startPointDrag\(event, "prize"\)\}/);
+  assert.match(planner, /map-prize-image/);
+  assert.doesNotMatch(planner, /final-monster final-composite/);
+  assert.match(worker, /PNG must contain a real alpha channel/);
+  assert.match(worker, /asset_kind AS assetKind/);
+});
