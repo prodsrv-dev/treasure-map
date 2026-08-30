@@ -80,9 +80,10 @@ test("keeps the prize separate and rejects opaque generated images", async () =>
 });
 
 test("reuses unchanged generated references and isolates newly added places", async () => {
-  const [locationSetup, planner] = await Promise.all([
+  const [locationSetup, planner, styles] = await Promise.all([
     readFile(new URL("../app/LocationSetup.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/MapPlanner.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(locationSetup, /function contentFingerprint/);
@@ -90,4 +91,5 @@ test("reuses unchanged generated references and isolates newly added places", as
   assert.match(locationSetup, /return \{ \.\.\.place, monsterSignature: signature \}/);
   assert.doesNotMatch(locationSetup, /IMAGE_GENERATION_VERSION/);
   assert.match(planner, /const marker = place\.monsterJobId \? null : configuredMarker/);
+  assert.match(styles, /\.map-point\.generated-monster\s*\{[\s\S]*?width:\s*84px;[\s\S]*?height:\s*84px;/);
 });
