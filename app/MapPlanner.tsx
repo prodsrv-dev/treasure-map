@@ -88,7 +88,17 @@ type DrawingMode = "points" | "lines" | "route" | "style" | "split";
 type RouteStyle = "plain" | "arrows" | "footprints";
 
 function placeSignature(place: MapPlace) {
-  return [place.first.trim(), place.second.trim(), place.photoName].join("\u0001");
+  let photoHash = 2166136261;
+  for (let index = 0; index < place.photoDataUrl.length; index += 1) {
+    photoHash ^= place.photoDataUrl.charCodeAt(index);
+    photoHash = Math.imul(photoHash, 16777619);
+  }
+  return [
+    place.first.trim(),
+    place.second.trim(),
+    place.photoName,
+    (photoHash >>> 0).toString(36),
+  ].join("\u0001");
 }
 
 type LineSegment = {
@@ -2714,10 +2724,11 @@ export default function MapPlanner({
             const position = positions[String(place.id)];
             const adventure = adventures[String(place.id)]
               ?? createDefaultAdventure(place, index, locationType);
-            const marker = adventure
+            const configuredMarker = adventure
               ? markerCatalog.find((option) => option.id === adventure.marker)
               : null;
             const generatedMonster = monsterImages[String(place.id)];
+            const marker = place.monsterJobId ? null : configuredMarker;
             const markerScale = marker ? { "--marker-scale": marker.scale } : null;
             const pointStyle: CSSProperties = position
               ? { left: `${position.x}%`, top: `${position.y}%`, ...markerScale } as CSSProperties

@@ -73,3 +73,16 @@ test("keeps the prize separate and rejects opaque generated images", async () =>
   assert.match(worker, /PNG must contain a real alpha channel/);
   assert.match(worker, /asset_kind AS assetKind/);
 });
+
+test("reuses unchanged generated references and isolates newly added places", async () => {
+  const [locationSetup, planner] = await Promise.all([
+    readFile(new URL("../app/LocationSetup.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/MapPlanner.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(locationSetup, /function contentFingerprint/);
+  assert.match(locationSetup, /reusablePlaceSignature/);
+  assert.match(locationSetup, /return \{ \.\.\.place, monsterSignature: signature \}/);
+  assert.doesNotMatch(locationSetup, /IMAGE_GENERATION_VERSION/);
+  assert.match(planner, /const marker = place\.monsterJobId \? null : configuredMarker/);
+});

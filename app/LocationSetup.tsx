@@ -23,8 +23,6 @@ type PrizeItem = {
   imageSignature: string;
 };
 
-const IMAGE_GENERATION_VERSION = "transparent-cutout-v2";
-
 type LocationDraft = {
   locationType: LocationType | null;
   seekerName: string;
@@ -33,6 +31,37 @@ type LocationDraft = {
   prize: PrizeItem;
   confirmed: boolean;
 };
+
+function contentFingerprint(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function placeImageSignature(locationType: LocationType, place: PlaceItem) {
+  return `content-v1|${locationType}|${place.first.trim()}|${place.second.trim()}|${place.photoName}|${contentFingerprint(place.photoDataUrl)}`;
+}
+
+function reusablePlaceSignature(locationType: LocationType, place: PlaceItem, signature: string) {
+  const legacy = `${locationType}|${place.first.trim()}|${place.second.trim()}|${place.photoName}|${place.photoDataUrl.length}`;
+  return signature === placeImageSignature(locationType, place)
+    || signature === legacy
+    || signature === `transparent-cutout-v2|${legacy}`;
+}
+
+function prizeImageSignature(prize: PrizeItem) {
+  return `content-v1|${prize.name.trim()}|${prize.photoName}|${contentFingerprint(prize.photoDataUrl)}`;
+}
+
+function reusablePrizeSignature(prize: PrizeItem) {
+  const legacy = `${prize.name.trim()}|${prize.photoName}|${prize.photoDataUrl.length}`;
+  return prize.imageSignature === prizeImageSignature(prize)
+    || prize.imageSignature === legacy
+    || prize.imageSignature === `transparent-cutout-v2|${legacy}`;
+}
 
 const DRAFT_STORAGE_KEY = "treasure-map:location-draft:v1";
 const SCROLL_STORAGE_KEY = "treasure-map:scroll-position:v1";
@@ -375,7 +404,7 @@ export default function LocationSetup() {
   function updatePlace(id: number, field: "first" | "second", value: string) {
     setPlaces((current) => current.map((place) => (
       place.id === id
-        ? { ...place, [field]: value, monsterJobId: "", monsterSignature: "" }
+        ? { ...place, [field]: value }
         : place
     )));
     setConfirmed(false);
@@ -386,7 +415,7 @@ export default function LocationSetup() {
     const photoName = file?.name ?? "";
     setPlaces((current) => current.map((place) => (
       place.id === id
-        ? { ...place, photoName, photoDataUrl: "", monsterJobId: "", monsterSignature: "" }
+        ? { ...place, photoName, photoDataUrl: "" }
         : place
     )));
     setConfirmed(false);
@@ -396,13 +425,13 @@ export default function LocationSetup() {
       const photoDataUrl = await prepareMapPhoto(file);
       setPlaces((current) => current.map((place) => (
         place.id === id
-          ? { ...place, photoName, photoDataUrl, monsterJobId: "", monsterSignature: "" }
+          ? { ...place, photoName, photoDataUrl }
           : place
       )));
     } catch {
       setPlaces((current) => current.map((place) => (
         place.id === id
-          ? { ...place, photoName: "", photoDataUrl: "", monsterJobId: "", monsterSignature: "" }
+          ? { ...place, photoName: "", photoDataUrl: "" }
           : place
       )));
     }
@@ -415,8 +444,6 @@ export default function LocationSetup() {
       ...current,
       photoName,
       photoDataUrl: "",
-      imageJobId: "",
-      imageSignature: "",
     }));
     setConfirmed(false);
 
@@ -427,16 +454,12 @@ export default function LocationSetup() {
         ...current,
         photoName,
         photoDataUrl,
-        imageJobId: "",
-        imageSignature: "",
       }));
     } catch {
       setPrize((current) => ({
         ...current,
         photoName: "",
         photoDataUrl: "",
-        imageJobId: "",
-        imageSignature: "",
       }));
     }
   }
@@ -470,8 +493,10 @@ export default function LocationSetup() {
     const updatedPlaces = await Promise.all(places.map(async (place) => {
       if (!place.first.trim() || !place.second.trim() || !place.photoDataUrl) return place;
 
-      const signature = `${IMAGE_GENERATION_VERSION}|${locationType}|${place.first.trim()}|${place.second.trim()}|${place.photoName}|${place.photoDataUrl.length}`;
-      if (place.monsterJobId && place.monsterSignature === signature) return place;
+      const signature = placeImageSignature(locationType, place);
+      if (place.monsterJobId && reusablePlaceSignature(locationType, place, place.monsterSignature)) {
+        return { ...place, monsterSignature: signature };
+      }
 
       try {
         const objectName = locationType === "apartment" ? place.second.trim() : place.first.trim();
@@ -499,8 +524,10 @@ export default function LocationSetup() {
 
     let updatedPrize = prize;
     if (prize.name.trim() && prize.photoDataUrl) {
-      const signature = `${IMAGE_GENERATION_VERSION}|${prize.name.trim()}|${prize.photoName}|${prize.photoDataUrl.length}`;
-      if (!prize.imageJobId || prize.imageSignature !== signature) {
+      const signature = prizeImageSignature(prize);
+      if (prize.imageJobId && reusablePrizeSignature(prize)) {
+        updatedPrize = { ...prize, imageSignature: signature };
+      } else {
         try {
           const response = await fetch("/api/monster-jobs", {
             method: "POST",
@@ -656,8 +683,6 @@ export default function LocationSetup() {
                     setPrize((current) => ({
                       ...current,
                       name: event.target.value,
-                      imageJobId: "",
-                      imageSignature: "",
                     }));
                     setConfirmed(false);
                   }}
