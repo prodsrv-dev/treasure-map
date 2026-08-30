@@ -23,6 +23,8 @@ type PrizeItem = {
   imageSignature: string;
 };
 
+const IMAGE_GENERATION_VERSION = "transparent-cutout-v2";
+
 type LocationDraft = {
   locationType: LocationType | null;
   seekerName: string;
@@ -468,7 +470,7 @@ export default function LocationSetup() {
     const updatedPlaces = await Promise.all(places.map(async (place) => {
       if (!place.first.trim() || !place.second.trim() || !place.photoDataUrl) return place;
 
-      const signature = `${locationType}|${place.first.trim()}|${place.second.trim()}|${place.photoName}|${place.photoDataUrl.length}`;
+      const signature = `${IMAGE_GENERATION_VERSION}|${locationType}|${place.first.trim()}|${place.second.trim()}|${place.photoName}|${place.photoDataUrl.length}`;
       if (place.monsterJobId && place.monsterSignature === signature) return place;
 
       try {
@@ -497,7 +499,7 @@ export default function LocationSetup() {
 
     let updatedPrize = prize;
     if (prize.name.trim() && prize.photoDataUrl) {
-      const signature = `${prize.name.trim()}|${prize.photoName}|${prize.photoDataUrl.length}`;
+      const signature = `${IMAGE_GENERATION_VERSION}|${prize.name.trim()}|${prize.photoName}|${prize.photoDataUrl.length}`;
       if (!prize.imageJobId || prize.imageSignature !== signature) {
         try {
           const response = await fetch("/api/monster-jobs", {
