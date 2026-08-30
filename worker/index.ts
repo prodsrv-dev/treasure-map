@@ -200,7 +200,13 @@ async function findReusableMonsterJob(
       await env.DB.prepare("UPDATE monster_jobs SET source_hash = ? WHERE id = ?")
         .bind(candidateHash, row.id).run();
     }
-    if (candidateHash === sourceHash) return row;
+    if (candidateHash !== sourceHash) continue;
+    if (row.status === "completed") {
+      if (!row.resultKey || row.resultType !== "image/png") continue;
+      const result = await env.MONSTER_ASSETS.get(row.resultKey);
+      if (!result || !pngHasAlphaChannel(await result.arrayBuffer())) continue;
+    }
+    return row;
   }
   return null;
 }

@@ -1516,8 +1516,8 @@ h2 {
 }
 
 .map-point.generated-monster {
-  width: 84px;
-  height: 84px;
+  width: 101px;
+  height: 101px;
   z-index: 12;
   overflow: visible;
   border-radius: 0;
@@ -2630,8 +2630,8 @@ h2 {
   }
 
   .map-point.generated-monster {
-    width: 76px;
-    height: 76px;
+    width: 91px;
+    height: 91px;
   }
 }
 

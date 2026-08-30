@@ -76,6 +76,7 @@ test("keeps the prize separate and rejects opaque generated images", async () =>
   assert.match(worker, /asset_kind AS assetKind/);
   assert.match(worker, /findReusableMonsterJob/);
   assert.match(worker, /reuseCompletedMonsterJob/);
+  assert.match(worker, /!pngHasAlphaChannel\(await result\.arrayBuffer\(\)\)/);
   assert.match(worker, /source_hash/);
 });
 
@@ -91,5 +92,5 @@ test("reuses unchanged generated references and isolates newly added places", as
   assert.match(locationSetup, /return \{ \.\.\.place, monsterSignature: signature \}/);
   assert.doesNotMatch(locationSetup, /IMAGE_GENERATION_VERSION/);
   assert.match(planner, /const marker = place\.monsterJobId \? null : configuredMarker/);
-  assert.match(styles, /\.map-point\.generated-monster\s*\{[\s\S]*?width:\s*84px;[\s\S]*?height:\s*84px;/);
+  assert.match(styles, /\.map-point\.generated-monster\s*\{[\s\S]*?width:\s*101px;[\s\S]*?height:\s*101px;/);
 });
