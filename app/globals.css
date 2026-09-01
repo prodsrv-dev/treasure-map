@@ -1444,6 +1444,27 @@ h2 {
 .map-start-point {
   width: 62px;
   height: 62px;
+  z-index: 14;
+  overflow: visible;
+}
+
+.map-start-label {
+  position: absolute;
+  left: 50%;
+  bottom: -12px;
+  transform: translateX(-50%) rotate(-2deg);
+  border: 1px solid rgba(107, 70, 24, 0.5);
+  background: rgba(247, 233, 196, 0.94);
+  color: #74341f;
+  padding: 3px 7px 2px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .map-compass {

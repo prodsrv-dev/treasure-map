@@ -68,6 +68,10 @@ test("keeps the prize separate and rejects opaque generated images", async () =>
   assert.match(locationSetup, /Что будет искать ребёнок\?/);
   assert.match(locationSetup, /assetKind: "prize"/);
   assert.match(planner, /onPointerDown=\{\(event\) => startPointDrag\(event, "prize"\)\}/);
+  assert.match(planner, /DEFAULT_START_POSITION: PointPosition = \{ x: 10, y: 14 \}/);
+  assert.match(planner, /start: \{ \.\.\.DEFAULT_START_POSITION \}/);
+  assert.match(planner, /<span className="map-start-label">Старт<\/span>/);
+  assert.match(planner, /if \(id === "start"\)/);
   assert.match(planner, /map-prize-image/);
   assert.match(planner, /map-prize-placeholder/);
   assert.doesNotMatch(planner, /prizeImage \|\| "\/treasure-chest-map\.png"/);

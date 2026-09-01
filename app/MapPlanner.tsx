@@ -84,6 +84,7 @@ type PointId = number | "start" | "prize";
 const FINAL_COMPOSITE_BOTTOM_GUARD = 110;
 const MIN_PARTITION_SEED_DISTANCE = 42;
 const PARTITION_VERSION = 4;
+const DEFAULT_START_POSITION: PointPosition = { x: 10, y: 14 };
 type DrawingMode = "points" | "lines" | "route" | "style" | "split";
 type RouteStyle = "plain" | "arrows" | "footprints";
 
@@ -1323,7 +1324,9 @@ export default function MapPlanner({
 }) {
   const isOutdoor = locationType !== "apartment";
   const [size, setSize] = useState<BoardSize>(DEFAULT_SIZE);
-  const [positions, setPositions] = useState<Record<string, PointPosition>>({});
+  const [positions, setPositions] = useState<Record<string, PointPosition>>({
+    start: { ...DEFAULT_START_POSITION },
+  });
   const [lines, setLines] = useState<LineSegment[]>([]);
   const [partitionCells, setPartitionCells] = useState<PartitionCell[]>([]);
   const [partitionSchemaVersion, setPartitionSchemaVersion] = useState(0);
@@ -1517,6 +1520,9 @@ export default function MapPlanner({
         }
       });
       const restoredPositions = { ...stored.positions };
+      if (!restoredPositions.start) {
+        restoredPositions.start = { ...DEFAULT_START_POSITION };
+      }
       if (!restoredPositions.prize && restoredPositions.treasure) {
         restoredPositions.prize = {
           x: clamp(restoredPositions.treasure.x + 12, 3, 97),
@@ -1664,7 +1670,7 @@ export default function MapPlanner({
 
   function resetOutdoorWork() {
     cancelPointerAction();
-    setPositions({});
+    setPositions({ start: { ...DEFAULT_START_POSITION } });
     setLines([]);
     setManualRoutes(null);
     setStyled(false);
@@ -1880,6 +1886,9 @@ export default function MapPlanner({
     const pointKey = String(id);
     invalidatePartition();
     setPositions((current) => {
+      if (id === "start") {
+        return { ...current, start: { ...DEFAULT_START_POSITION } };
+      }
       const next = { ...current };
       delete next[pointKey];
       return next;
@@ -2698,8 +2707,8 @@ export default function MapPlanner({
                 "--pile-angle": "-10deg",
                 "--pile-z": 19,
               } as CSSProperties}
-            aria-label="Точка старта"
-            title="Точка старта"
+            aria-label="Старт квеста"
+            title="Старт квеста — перетащите в нужное место"
             tabIndex={mode === "points" ? 0 : -1}
             onPointerDown={(event) => startPointDrag(event, "start")}
             onKeyDown={(event) => movePointWithKeyboard(event, "start")}
@@ -2718,6 +2727,7 @@ export default function MapPlanner({
               </g>
               <circle className="compass-pin" cx="32" cy="32" r="2.2" />
             </svg>
+            <span className="map-start-label">Старт</span>
           </button>
 
           {places.map((place, index) => {
