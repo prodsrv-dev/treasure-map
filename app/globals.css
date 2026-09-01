@@ -877,6 +877,19 @@ h2 {
   color: var(--green);
 }
 
+.route-draw-hint {
+  width: 100%;
+  grid-column: 1 / -1;
+  grid-row: 3;
+  margin: 0;
+  border-left: 3px solid var(--gold);
+  background: rgba(247, 239, 220, 0.1);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 8px 12px;
+}
+
 .line-count {
   grid-column: 3;
   grid-row: 1;
@@ -2521,6 +2534,10 @@ h2 {
   .route-style-switch button {
     flex: 1;
     padding: 0 8px;
+  }
+
+  .route-draw-hint {
+    grid-row: 4;
   }
 
   .line-count {

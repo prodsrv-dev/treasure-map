@@ -102,3 +102,12 @@ test("reuses unchanged generated references and isolates newly added places", as
   assert.match(planner, /const marker = place\.monsterJobId \? null : configuredMarker/);
   assert.match(styles, /\.map-point\.generated-monster\s*\{[\s\S]*?width:\s*101px;[\s\S]*?height:\s*101px;/);
 });
+
+test("keeps route drawing usable when walls block automatic pathfinding", async () => {
+  const planner = await readFile(new URL("../app/MapPlanner.tsx", import.meta.url), "utf8");
+
+  assert.match(planner, /const segment = strictRoute\s*\? simplifyStrictRoute\(strictRoute, walls, size\)\s*: \[points\[index\], points\[index \+ 1\]\]/);
+  assert.doesNotMatch(planner, /if \(!strictRoute\) return \{\s*path: ""/);
+  assert.match(planner, /Маршрут построен автоматически/);
+  assert.match(planner, /зажмите левую кнопку мыши/);
+});

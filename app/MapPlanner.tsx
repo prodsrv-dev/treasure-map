@@ -890,11 +890,9 @@ function composeRoute(
   let swellSide = 1;
   for (let index = 0; index < points.length - 1; index += 1) {
     const strictRoute = findGridRoute(points[index], points[index + 1], walls, size);
-    if (!strictRoute) return {
-      path: "", arrows: [], footprints: [], cross: null,
-    };
-
-    const segment = simplifyStrictRoute(strictRoute, walls, size);
+    const segment = strictRoute
+      ? simplifyStrictRoute(strictRoute, walls, size)
+      : [points[index], points[index + 1]];
     const swollen = swellLeg(segment, walls, size, swellSide);
     swellSide = swollen.side;
     composed.push(...swollen.points.slice(1));
@@ -1454,11 +1452,15 @@ export default function MapPlanner({
     : outdoorContourCount > 1 && outdoorContourCount < 5
       ? `${outdoorContourCount} контура`
       : `${outdoorContourCount} контуров`;
-  const toolbarStatusLabel = mode === "split"
-    ? partitionCountLabel
-    : isOutdoor
-      ? outdoorContourLabel
-      : lineCountLabel;
+  const toolbarStatusLabel = mode === "route"
+    ? manualRoutes === null
+      ? "Маршрут построен"
+      : `${manualRoutes.length} ${manualRoutes.length === 1 ? "линия маршрута" : "линии маршрута"}`
+    : mode === "split"
+      ? partitionCountLabel
+      : isOutdoor
+        ? outdoorContourLabel
+        : lineCountLabel;
 
   useEffect(() => {
     const jobIds = [
@@ -2399,19 +2401,24 @@ export default function MapPlanner({
             </button>
           </div>
           {mode === "route" ? (
-            <div className="route-style-switch" role="group" aria-label="Оформление маршрута">
-              {routeStyleOptions.map((option) => (
-                <button
-                  className={routeStyle === option.id ? "active" : ""}
-                  type="button"
-                  aria-pressed={routeStyle === option.id}
-                  onClick={() => setRouteStyle(option.id)}
-                  key={option.id}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="route-style-switch" role="group" aria-label="Оформление маршрута">
+                {routeStyleOptions.map((option) => (
+                  <button
+                    className={routeStyle === option.id ? "active" : ""}
+                    type="button"
+                    aria-pressed={routeStyle === option.id}
+                    onClick={() => setRouteStyle(option.id)}
+                    key={option.id}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <p className="route-draw-hint">
+                Маршрут построен автоматически. Чтобы изменить его, зажмите левую кнопку мыши и проведите линию по карте.
+              </p>
+            </>
           ) : null}
           <div className="standard-size-picker">
             <button
