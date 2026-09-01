@@ -890,6 +890,12 @@ h2 {
   padding: 8px 12px;
 }
 
+.route-draw-hint.blocked {
+  border-left-color: #f1a28f;
+  background: rgba(211, 72, 52, 0.18);
+  color: #fff1ec;
+}
+
 .line-count {
   grid-column: 3;
   grid-row: 1;

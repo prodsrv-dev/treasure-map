@@ -103,11 +103,16 @@ test("reuses unchanged generated references and isolates newly added places", as
   assert.match(styles, /\.map-point\.generated-monster\s*\{[\s\S]*?width:\s*101px;[\s\S]*?height:\s*101px;/);
 });
 
-test("keeps route drawing usable when walls block automatic pathfinding", async () => {
+test("never draws a route through a wall when automatic pathfinding is blocked", async () => {
   const planner = await readFile(new URL("../app/MapPlanner.tsx", import.meta.url), "utf8");
 
-  assert.match(planner, /const segment = strictRoute\s*\? simplifyStrictRoute\(strictRoute, walls, size\)\s*: \[points\[index\], points\[index \+ 1\]\]/);
-  assert.doesNotMatch(planner, /if \(!strictRoute\) return \{\s*path: ""/);
+  assert.match(planner, /if \(!strictRoute\) return \{\s*path: "", arrows: \[\], footprints: \[\], cross: null, blocked: true/);
+  assert.doesNotMatch(planner, /: \[points\[index\], points\[index \+ 1\]\]/);
+  assert.match(planner, /crossings\.length > 0 \|\| \(nearWall && !nearRouteEndpoint\)/);
+  assert.match(planner, /function wallSafeRoutePath/);
+  assert.match(planner, /path: wallSafeRoutePath\(pixels\)/);
+  assert.match(planner, /const path = wallSafeRoutePath\(pixels\)/);
+  assert.match(planner, /Стены полностью перекрывают один из переходов/);
   assert.match(planner, /Маршрут построен автоматически/);
   assert.match(planner, /зажмите левую кнопку мыши/);
 });

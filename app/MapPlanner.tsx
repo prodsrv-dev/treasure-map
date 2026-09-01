@@ -133,6 +133,7 @@ type RouteLayout = {
   arrows: RouteArrow[];
   footprints: RouteFootprint[];
   cross: { x: number; y: number } | null;
+  blocked?: boolean;
 };
 
 type PartitionSeed = {
@@ -513,8 +514,11 @@ function findGridRoute(
       const nextPoint = pointFor(nextCell.x, nextCell.y);
       const crossings = wallCrossings(currentPoint, nextPoint, walls, size);
       const nearWall = runsTooCloseToWall(currentPoint, nextPoint, walls, size);
-      const isEndpoint = nextKey === endKey;
-      if (crossings.length > 0 || (nearWall && !isEndpoint)) return;
+      const nearRouteEndpoint = [currentPoint, nextPoint].some((point) => (
+        pixelDistance(point, start, size) <= 42
+        || pixelDistance(point, end, size) <= 42
+      ));
+      if (crossings.length > 0 || (nearWall && !nearRouteEndpoint)) return;
 
       const previousKey = cameFrom.get(currentKey);
       let turnCost = 0;
@@ -572,6 +576,15 @@ function catmullRomPath(points: Array<{ x: number; y: number }>) {
       + ` ${coordinate(to.x)} ${coordinate(to.y)}`;
   }
   return path;
+}
+
+function wallSafeRoutePath(points: Array<{ x: number; y: number }>) {
+  if (!points.length) return "";
+  const coordinate = (value: number) => Number(value.toFixed(1));
+  return points.slice(1).reduce(
+    (path, point) => `${path} L ${coordinate(point.x)} ${coordinate(point.y)}`,
+    `M ${coordinate(points[0].x)} ${coordinate(points[0].y)}`,
+  );
 }
 
 function pointToSegmentDistance(
@@ -674,7 +687,7 @@ function composeDrawnRoute(
   for (let index = 0; index < points.length - 1; index += 1) {
     const segment = findGridRoute(points[index], points[index + 1], walls, size);
     if (!segment) return {
-      path: "", arrows: [], footprints: [], cross: null,
+      path: "", arrows: [], footprints: [], cross: null, blocked: true,
     };
     routed.push(...simplifyStrictRoute(segment, walls, size).slice(1));
   }
@@ -691,7 +704,7 @@ function composeDrawnRoute(
     });
 
   return {
-    path: catmullRomPath(pixels),
+    path: wallSafeRoutePath(pixels),
     arrows,
     footprints: routeFootprints(pixels),
     cross: null,
@@ -890,9 +903,10 @@ function composeRoute(
   let swellSide = 1;
   for (let index = 0; index < points.length - 1; index += 1) {
     const strictRoute = findGridRoute(points[index], points[index + 1], walls, size);
-    const segment = strictRoute
-      ? simplifyStrictRoute(strictRoute, walls, size)
-      : [points[index], points[index + 1]];
+    if (!strictRoute) return {
+      path: "", arrows: [], footprints: [], cross: null, blocked: true,
+    };
+    const segment = simplifyStrictRoute(strictRoute, walls, size);
     const swollen = swellLeg(segment, walls, size, swellSide);
     swellSide = swollen.side;
     composed.push(...swollen.points.slice(1));
@@ -918,7 +932,7 @@ function composeRoute(
     : null;
   if (tail) composed.push(tail);
   const pixels = composed.map((point) => toPixels(point, size));
-  const path = catmullRomPath(pixels);
+  const path = wallSafeRoutePath(pixels);
   return {
     path,
     arrows,
@@ -1425,6 +1439,7 @@ export default function MapPlanner({
       ? [composeRoute(routePoints, lines, size, !prizePosition)]
       : manualRoutes.map((route) => composeDrawnRoute(route, lines, size))
   ), [lines, manualRoutes, prizePosition, routePoints, size]);
+  const routeBlocked = routeLayouts.some((layout) => layout.blocked === true);
   const wallPieces = useMemo(
     () => lines.map((line) => {
       const start = toPixels({ x: line.x1, y: line.y1 }, size);
@@ -1453,9 +1468,11 @@ export default function MapPlanner({
       ? `${outdoorContourCount} контура`
       : `${outdoorContourCount} контуров`;
   const toolbarStatusLabel = mode === "route"
-    ? manualRoutes === null
-      ? "Маршрут построен"
-      : `${manualRoutes.length} ${manualRoutes.length === 1 ? "линия маршрута" : "линии маршрута"}`
+    ? routeBlocked
+      ? "Нет прохода"
+      : manualRoutes === null
+        ? "Маршрут построен"
+        : `${manualRoutes.length} ${manualRoutes.length === 1 ? "линия маршрута" : "линии маршрута"}`
     : mode === "split"
       ? partitionCountLabel
       : isOutdoor
@@ -2415,8 +2432,10 @@ export default function MapPlanner({
                   </button>
                 ))}
               </div>
-              <p className="route-draw-hint">
-                Маршрут построен автоматически. Чтобы изменить его, зажмите левую кнопку мыши и проведите линию по карте.
+              <p className={`route-draw-hint${routeBlocked ? " blocked" : ""}`} role={routeBlocked ? "alert" : undefined}>
+                {routeBlocked
+                  ? "Стены полностью перекрывают один из переходов. Оставьте в стене проход и нажмите «Начертить маршрут» ещё раз."
+                  : "Маршрут построен автоматически. Чтобы изменить его, зажмите левую кнопку мыши и проведите линию по карте."}
               </p>
             </>
           ) : null}
