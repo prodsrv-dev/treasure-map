@@ -38,6 +38,8 @@ const legacyRiddleFragments = [
   "Там, где подходит примета",
   "В одном из дальних уголков",
   "В обычном мире он притворяется предметом",
+  "Под видом привычной вещи он спит",
+  "Одежда бесследно уходит во власть",
 ];
 
 export function isLegacyRiddle(riddle: string) {
@@ -59,6 +61,37 @@ export function createDefaultAdventure(
 ): AdventureEntry {
   const { object } = placeDetails(place, locationType);
   const normalized = object.toLocaleLowerCase("ru-RU");
+
+  if (
+    normalized.includes("обув")
+    || normalized.includes("ботин")
+    || normalized.includes("туфл")
+    || normalized.includes("кроссов")
+  ) {
+    return {
+      marker: "tentacles",
+      monster: "Башмачный Хранитель",
+      riddle: `У двери стоит деревянный дружок,
+Внутри прячет туфли, ботинки, сапожок.
+Раскрой его створки, проверь уголок —
+Там ждёт продолжение — тайный клочок.`,
+    };
+  }
+
+  if (
+    normalized.includes("кулер")
+    || normalized.includes("помп")
+    || normalized.includes("диспенсер")
+  ) {
+    return {
+      marker: "faucet",
+      monster: "Водяной Носач",
+      riddle: `На синей бутыли устроился нос,
+Водичку из дома качает насос.
+Нажмёшь на макушку — наполнишь стакан.
+Ищи, где стоит этот маленький кран.`,
+    };
+  }
 
   if (normalized.includes("кран") || normalized.includes("смесител")) {
     return {
@@ -228,7 +261,7 @@ export default function RiddleDesigner({
                 <small>{details.location}</small>
               </div>
 
-              <div className="monster-art">
+              <div className={`monster-art${generatedMonster ? " has-generated-monster" : ""}`}>
                 <div className="monster-portrait">
                   <img
                     className={generatedMonster ? "generated-monster-image" : undefined}
@@ -239,21 +272,23 @@ export default function RiddleDesigner({
                 {generatedMonster ? (
                   <p className="generated-monster-note">Образ создан по фотографии-референсу</p>
                 ) : null}
-                <div className="marker-picker" role="group" aria-label={`Базовый образ чудовища для ${details.object}`}>
-                  {markerCatalog.map((marker) => (
-                    <button
-                      className={`marker-choice${entry.marker === marker.id ? " active" : ""}`}
-                      type="button"
-                      aria-label={marker.label}
-                      aria-pressed={entry.marker === marker.id}
-                      title={marker.label}
-                      onClick={() => updateEntry(place.id, { marker: marker.id })}
-                      key={marker.id}
-                    >
-                      <img src={marker.image} alt="" />
-                    </button>
-                  ))}
-                </div>
+                {!generatedMonster ? (
+                  <div className="marker-picker" role="group" aria-label={`Базовый образ чудовища для ${details.object}`}>
+                    {markerCatalog.map((marker) => (
+                      <button
+                        className={`marker-choice${entry.marker === marker.id ? " active" : ""}`}
+                        type="button"
+                        aria-label={marker.label}
+                        aria-pressed={entry.marker === marker.id}
+                        title={marker.label}
+                        onClick={() => updateEntry(place.id, { marker: marker.id })}
+                        key={marker.id}
+                      >
+                        <img src={marker.image} alt="" />
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               <label className="monster-name">

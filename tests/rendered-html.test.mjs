@@ -132,3 +132,19 @@ test("puts the prize on the same fragment as the last monster", async () => {
   assert.match(mapBack, /const isFinal = !nextFragment/);
   assert.match(mapBack, /finalFragmentMessage\(seekerName, prizeName\)/);
 });
+
+test("uses generated monster art without stale thumbnails and matches known objects", async () => {
+  const [designer, styles] = await Promise.all([
+    readFile(new URL("../app/RiddleDesigner.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(designer, /!generatedMonster \? \(/);
+  assert.match(designer, /normalized\.includes\("обув"\)/);
+  assert.match(designer, /Башмачный Хранитель/);
+  assert.match(designer, /normalized\.includes\("кулер"\)/);
+  assert.match(designer, /Водяной Носач/);
+  assert.match(designer, /Под видом привычной вещи он спит/);
+  assert.match(designer, /Одежда бесследно уходит во власть/);
+  assert.match(styles, /\.monster-art\.has-generated-monster/);
+});

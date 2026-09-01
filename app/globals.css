@@ -1833,6 +1833,15 @@ h2 {
   align-items: center;
 }
 
+.monster-art.has-generated-monster {
+  grid-template-columns: 132px minmax(0, 1fr);
+}
+
+.monster-art.has-generated-monster .monster-portrait {
+  width: 132px;
+  height: 132px;
+}
+
 .monster-portrait {
   width: 116px;
   height: 116px;
@@ -1869,6 +1878,7 @@ h2 {
 
 .generated-monster-note {
   grid-column: 2;
+  grid-row: 1;
   margin: 0;
   color: var(--green);
   font-size: 11px;
@@ -2603,9 +2613,18 @@ h2 {
     grid-template-columns: 104px minmax(0, 1fr);
   }
 
+  .monster-art.has-generated-monster {
+    grid-template-columns: 118px minmax(0, 1fr);
+  }
+
   .monster-portrait {
     width: 104px;
     height: 104px;
+  }
+
+  .monster-art.has-generated-monster .monster-portrait {
+    width: 118px;
+    height: 118px;
   }
 
   .riddle-actions {
