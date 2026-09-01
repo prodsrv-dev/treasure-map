@@ -116,3 +116,19 @@ test("never draws a route through a wall when automatic pathfinding is blocked",
   assert.match(planner, /Маршрут построен автоматически/);
   assert.match(planner, /зажмите левую кнопку мыши/);
 });
+
+test("puts the prize on the same fragment as the last monster", async () => {
+  const [planner, mapBack] = await Promise.all([
+    readFile(new URL("../app/MapPlanner.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/MapBackDesigner.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(planner, /const totalFragments = places\.length \+ 1/);
+  assert.doesNotMatch(planner, /seeds\.push\(\{ id: "prize"/);
+  assert.match(planner, /function positionPrizeInsideLastFragment/);
+  assert.match(planner, /nextCells\.find\(\(cell\) => cell\.id === String\(lastPlace\.id\)\)/);
+  assert.match(planner, /positionPrizeInsideLastFragment\(prizePosition, lastPosition, lastCell\)/);
+  assert.doesNotMatch(mapBack, /prizeTrailMessage/);
+  assert.match(mapBack, /const isFinal = !nextFragment/);
+  assert.match(mapBack, /finalFragmentMessage\(seekerName, prizeName\)/);
+});

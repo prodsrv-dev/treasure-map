@@ -49,10 +49,6 @@ function finalFragmentMessage(seekerName: string, prizeName: string) {
 Пусть эта победа станет первой из многих великих приключений!`;
 }
 
-function prizeTrailMessage() {
-  return "Все загадки позади!\nСобери карту и следуй по маршруту к отдельному знаку приза на лицевой стороне.";
-}
-
 function toPixels(point: PointPosition, size: BoardSize): PixelPoint {
   return {
     x: ((100 - point.x) / 100) * size.width,
@@ -219,18 +215,15 @@ export default function MapBackDesigner({
   const preparedFragments = fragments.flatMap((fragment, index) => {
     const nextFragment = fragments[index + 1];
     const nextAdventure = nextFragment ? adventures[nextFragment.id] : null;
-    const leadsToPrize = nextFragment?.id === "prize";
-    if (fragment.points.length < 3 || (nextFragment && !leadsToPrize && !nextAdventure)) return [];
+    if (fragment.points.length < 3 || (nextFragment && !nextAdventure)) return [];
 
     const isIntro = fragment.id === "start" && Boolean(nextAdventure);
-    const isFinal = fragment.id === "prize" || !nextFragment;
+    const isFinal = !nextFragment;
     const text = isIntro && nextAdventure
       ? introFragmentMessage(seekerName, nextAdventure.riddle)
       : isFinal
         ? finalFragmentMessage(seekerName, prizeName)
-        : leadsToPrize
-          ? prizeTrailMessage()
-          : nextAdventure?.riddle ?? "";
+        : nextAdventure?.riddle ?? "";
     const polygon = fragment.points.map((point) => toPixels(point, size));
     const textRect = largestTextRect(polygon);
     return [{

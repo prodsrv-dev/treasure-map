@@ -83,7 +83,7 @@ type ResizeAxis = "x" | "y" | "xy";
 type PointId = number | "start" | "prize";
 const FINAL_COMPOSITE_BOTTOM_GUARD = 110;
 const MIN_PARTITION_SEED_DISTANCE = 42;
-const PARTITION_VERSION = 4;
+const PARTITION_VERSION = 5;
 const DEFAULT_START_POSITION: PointPosition = { x: 10, y: 14 };
 type DrawingMode = "points" | "lines" | "route" | "style" | "split";
 type RouteStyle = "plain" | "arrows" | "footprints";
@@ -291,6 +291,46 @@ function createPartitionCells(seeds: PartitionSeed[], size: BoardSize): Partitio
       })),
     }];
   });
+}
+
+function pointInsidePartitionCell(point: PointPosition, cell: PartitionCell) {
+  let inside = false;
+  cell.points.forEach((current, index) => {
+    const previous = cell.points[(index + cell.points.length - 1) % cell.points.length];
+    const crosses = (current.y > point.y) !== (previous.y > point.y)
+      && point.x < (
+        ((previous.x - current.x) * (point.y - current.y))
+        / (previous.y - current.y)
+      ) + current.x;
+    if (crosses) inside = !inside;
+  });
+  return inside;
+}
+
+function positionPrizeInsideLastFragment(
+  prize: PointPosition,
+  lastMonster: PointPosition,
+  cell: PartitionCell,
+) {
+  if (pointInsidePartitionCell(prize, cell)) return prize;
+
+  let insideProgress = 0;
+  let outsideProgress = 1;
+  for (let iteration = 0; iteration < 20; iteration += 1) {
+    const progress = (insideProgress + outsideProgress) / 2;
+    const candidate = {
+      x: lastMonster.x + (prize.x - lastMonster.x) * progress,
+      y: lastMonster.y + (prize.y - lastMonster.y) * progress,
+    };
+    if (pointInsidePartitionCell(candidate, cell)) insideProgress = progress;
+    else outsideProgress = progress;
+  }
+
+  const safeProgress = insideProgress * 0.78;
+  return {
+    x: lastMonster.x + (prize.x - lastMonster.x) * safeProgress,
+    y: lastMonster.y + (prize.y - lastMonster.y) * safeProgress,
+  };
 }
 
 function partitionCellPath(cell: PartitionCell, size: BoardSize) {
@@ -1385,10 +1425,10 @@ export default function MapPlanner({
       const point = positions[id];
       if (point) seeds.push({ id, point });
     });
-    if (prizePosition) seeds.push({ id: "prize", point: prizePosition });
     return seeds;
-  }, [places, positions, prizePosition]);
-  const totalPoints = places.length + 2;
+  }, [places, positions]);
+  const totalFragments = places.length + 1;
+  const totalMapItems = places.length + 2;
   const currentPlaceSignatures = useMemo(() => Object.fromEntries(
     places.map((place) => [String(place.id), placeSignature(place)]),
   ), [places]);
@@ -1405,7 +1445,8 @@ export default function MapPlanner({
     && monsterJobs[prize.imageJobId]?.status === "completed"
     ? monsterJobs[prize.imageJobId]?.resultUrl
     : undefined;
-  const canPartition = partitionSeeds.length === totalPoints
+  const canPartition = partitionSeeds.length === totalFragments
+    && Boolean(prizePosition)
     && partitionSeeds.length >= 2;
   const cutSegments = useMemo(
     () => partitionCutSegments(partitionCells),
@@ -1559,7 +1600,6 @@ export default function MapPlanner({
       const validPartitionIds = new Set([
         "start",
         ...places.map((place) => String(place.id)),
-        "prize",
       ]);
       const restoredPartitionCells = stored.partitionCells.filter((cell) => validPartitionIds.has(cell.id));
       const restoredPartitionSeeds: PartitionSeed[] = [];
@@ -1571,9 +1611,6 @@ export default function MapPlanner({
         const point = restoredPositions[id];
         if (point) restoredPartitionSeeds.push({ id, point });
       });
-      if (restoredPositions.prize) {
-        restoredPartitionSeeds.push({ id: "prize", point: restoredPositions.prize });
-      }
       const shouldMigratePartition = stored.partitionVersion !== PARTITION_VERSION
         && restoredPartitionSeeds.length === validPartitionIds.size;
       const migratedPartitionCells = shouldMigratePartition
@@ -1620,7 +1657,7 @@ export default function MapPlanner({
         positions,
         lines,
         partitionCells,
-        partitionVersion: partitionCells.length === totalPoints
+        partitionVersion: partitionCells.length === totalFragments
           ? partitionSchemaVersion
           : undefined,
         manualRoutes,
@@ -1654,6 +1691,7 @@ export default function MapPlanner({
     size,
     styled,
     currentPlaceSignatures,
+    totalFragments,
   ]);
 
   useEffect(() => {
@@ -1856,6 +1894,15 @@ export default function MapPlanner({
     }
 
     setPartitionCells(nextCells);
+    const lastPlace = places.at(-1);
+    const lastCell = lastPlace
+      ? nextCells.find((cell) => cell.id === String(lastPlace.id))
+      : undefined;
+    const lastPosition = lastPlace ? positions[String(lastPlace.id)] : undefined;
+    if (prizePosition && lastCell && lastPosition) {
+      const nextPrizePosition = positionPrizeInsideLastFragment(prizePosition, lastPosition, lastCell);
+      setPositions((current) => ({ ...current, prize: nextPrizePosition }));
+    }
     setPartitionSchemaVersion(PARTITION_VERSION);
     setPartitionError(null);
   }
@@ -2229,10 +2276,10 @@ export default function MapPlanner({
   function openMapBack() {
     if (!canPartition) return;
 
-    const nextPartitionCells = partitionCells.length === totalPoints
+    const nextPartitionCells = partitionCells.length === totalFragments
       ? partitionCells
       : createPartitionCells(partitionSeeds, size);
-    if (nextPartitionCells.length !== totalPoints) {
+    if (nextPartitionCells.length !== totalFragments) {
       setPartitionError("Не удалось восстановить части карты. Немного раздвиньте точки и повторите.");
       return;
     }
@@ -2245,6 +2292,15 @@ export default function MapPlanner({
       });
       return next;
     });
+    const lastPlace = places.at(-1);
+    const lastCell = lastPlace
+      ? nextPartitionCells.find((cell) => cell.id === String(lastPlace.id))
+      : undefined;
+    const lastPosition = lastPlace ? positions[String(lastPlace.id)] : undefined;
+    if (prizePosition && lastCell && lastPosition) {
+      const nextPrizePosition = positionPrizeInsideLastFragment(prizePosition, lastPosition, lastCell);
+      setPositions((current) => ({ ...current, prize: nextPrizePosition }));
+    }
     setPartitionCells(nextPartitionCells);
     setPartitionSchemaVersion(PARTITION_VERSION);
     setPartitionError(null);
@@ -2275,7 +2331,7 @@ export default function MapPlanner({
           </h2>
         </div>
         <div className="map-status" aria-live="polite">
-          <strong>{placedCount} из {totalPoints}</strong>
+          <strong>{placedCount} из {totalMapItems}</strong>
           <span>{isOutdoor ? "меток расставлено" : "точек расставлено"}</span>
         </div>
       </header>
