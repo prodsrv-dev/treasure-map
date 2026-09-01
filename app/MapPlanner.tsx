@@ -2754,7 +2754,7 @@ export default function MapPlanner({
               >
                 {generatedMonster || marker
                   ? (
-                    <img className="map-monster-image" src={generatedMonster || marker?.image} alt="" draggable={false} />
+                    <img className="map-monster-image" src={generatedMonster || marker?.image} alt="" decoding="async" draggable={false} />
                   )
                   : (
                     <>
@@ -2789,7 +2789,7 @@ export default function MapPlanner({
             onKeyDown={(event) => movePointWithKeyboard(event, "prize")}
           >
             {prizeImage
-              ? <img className="map-prize-image" src={prizeImage} alt="" draggable={false} />
+              ? <img className="map-prize-image" src={prizeImage} alt="" decoding="async" draggable={false} />
               : <span className="map-prize-placeholder" aria-hidden="true">?</span>}
             <span className="map-prize-label">Приз</span>
           </button>

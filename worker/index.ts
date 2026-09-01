@@ -158,6 +158,14 @@ function pngHasAlphaChannel(bytes: ArrayBuffer) {
   return colorType === 4 || colorType === 6;
 }
 
+function pngDimensions(bytes: ArrayBuffer) {
+  const data = new Uint8Array(bytes);
+  const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (data.length < 24 || !pngSignature.every((value, index) => data[index] === value)) return null;
+  const view = new DataView(bytes);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
 async function imageSourceHash(bytes: ArrayBuffer | Uint8Array) {
   const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const digest = await crypto.subtle.digest("SHA-256", source);
@@ -376,6 +384,10 @@ async function handleMonsterJobs(request: Request, env: Env, url: URL) {
     if (!bytes.byteLength || bytes.byteLength > 12_000_000) return json({ error: "Generated image is empty or too large" }, 400);
     if (!pngHasAlphaChannel(bytes)) {
       return json({ error: "PNG must contain a real alpha channel" }, 422);
+    }
+    const dimensions = pngDimensions(bytes);
+    if (!dimensions || dimensions.width > 800 || dimensions.height > 800) {
+      return json({ error: "PNG is too large for map rendering; resize it to at most 800x800" }, 422);
     }
     const extension = "png";
     const resultKey = `monster-results/${id}.${extension}`;

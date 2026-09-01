@@ -73,6 +73,10 @@ test("keeps the prize separate and rejects opaque generated images", async () =>
   assert.doesNotMatch(planner, /prizeImage \|\| "\/treasure-chest-map\.png"/);
   assert.doesNotMatch(planner, /final-monster final-composite/);
   assert.match(worker, /PNG must contain a real alpha channel/);
+  assert.match(worker, /PNG is too large for map rendering/);
+  assert.match(worker, /dimensions\.width > 800 \|\| dimensions\.height > 800/);
+  assert.match(planner, /map-monster-image[^>]+decoding="async"/);
+  assert.match(planner, /map-prize-image[^>]+decoding="async"/);
   assert.match(worker, /asset_kind AS assetKind/);
   assert.match(worker, /findReusableMonsterJob/);
   assert.match(worker, /reuseCompletedMonsterJob/);
