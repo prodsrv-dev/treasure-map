@@ -1246,14 +1246,7 @@ h2 {
 
 .map-lines .map-cut-cells path {
   stroke: none;
-}
-
-.map-lines .map-cut-cells path.even {
-  fill: rgba(197, 71, 50, 0.055);
-}
-
-.map-lines .map-cut-cells path.odd {
-  fill: rgba(44, 91, 78, 0.045);
+  fill: rgba(199, 154, 50, 0.055);
 }
 
 .map-lines .map-cut-line-under {
@@ -2116,19 +2109,12 @@ h2 {
 }
 
 .map-back-fragments path {
+  fill: rgba(199, 154, 50, 0.045);
   stroke: rgba(94, 95, 91, 0.48);
   stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
-}
-
-.map-back-fragments path.even {
-  fill: rgba(197, 71, 50, 0.045);
-}
-
-.map-back-fragments path.odd {
-  fill: rgba(44, 91, 78, 0.035);
 }
 
 .fragment-riddle {
