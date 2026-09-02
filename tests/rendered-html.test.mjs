@@ -149,4 +149,7 @@ test("uses generated monster art without stale thumbnails and matches known obje
   assert.match(designer, /Под видом привычной вещи он спит/);
   assert.match(designer, /Одежда бесследно уходит во власть/);
   assert.match(styles, /\.monster-art\.has-generated-monster/);
+  assert.match(styles, /\.riddle-item\s*\{[\s\S]*?overflow:\s*hidden;/);
+  assert.match(styles, /\.monster-portrait\s*\{[\s\S]*?overflow:\s*hidden;/);
+  assert.doesNotMatch(styles, /\.monster-portrait::after/);
 });

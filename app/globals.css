@@ -1794,6 +1794,7 @@ h2 {
   border: 1px solid rgba(23, 34, 31, 0.17);
   border-radius: 6px;
   background: var(--paper-light);
+  overflow: hidden;
   padding: 20px;
 }
 
@@ -1848,17 +1849,7 @@ h2 {
   display: grid;
   place-items: center;
   position: relative;
-}
-
-.monster-portrait::after {
-  content: "";
-  width: 82%;
-  height: 1px;
-  position: absolute;
-  left: 9%;
-  bottom: 7px;
-  background: rgba(85, 57, 35, 0.23);
-  box-shadow: 0 4px 8px rgba(85, 57, 35, 0.16);
+  overflow: hidden;
 }
 
 .monster-portrait img {
