@@ -146,6 +146,8 @@ test("uses generated monster art without stale thumbnails and matches known obje
   assert.match(designer, /Водяной Носач/);
   assert.match(designer, /Когтистый, горбатый, безмолвный силач/);
   assert.match(designer, /На синей бутыли устроился нос/);
+  assert.match(designer, /За стеклянной стеной колышется свет/);
+  assert.match(designer, /За стеклянной стеной колыхается свет/);
   assert.match(designer, /Под видом привычной вещи он спит/);
   assert.match(designer, /Одежда бесследно уходит во власть/);
   assert.match(styles, /\.monster-art\.has-generated-monster/);
